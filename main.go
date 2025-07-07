@@ -12,6 +12,10 @@ import (
 
 func main() {
 	http.HandleFunc("/health", healthCheck)
+	go func() {
+		log.Println("Healthcheck server running at :8080/health")
+		log.Fatal(http.ListenAndServe(":8080", nil))
+	}()
 	// Load cấu hình
 	config.LoadConfig()
 
