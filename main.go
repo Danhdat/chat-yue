@@ -1,16 +1,17 @@
 package main
 
 import (
+	"chatbtc/config"
+	"chatbtc/services"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"chatbtc/config"
-	"chatbtc/services"
 )
 
 func main() {
+	http.HandleFunc("/health", healthCheck)
 	// Load cấu hình
 	config.LoadConfig()
 
@@ -40,4 +41,9 @@ func main() {
 	// Chờ tín hiệu dừng
 	<-stopChan
 	log.Println("🛑 Đang dừng bot...")
+}
+
+func healthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
