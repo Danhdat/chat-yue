@@ -282,7 +282,7 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 		message += "• Chờ breakout khỏi vùng consolidation\n"
 		message += fmt.Sprintf("• Watch level: EMA50 ($%s)\n", utils.FormatPriceN(ema50, 4))
 	}
-	loc, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
+	loc := time.FixedZone("UTC+7", 7*60*60)
 	// Thời gian cập nhật
 	message += fmt.Sprintf("\n⏰ **Cập nhật lúc:** %s", time.Now().In(loc).Format("15:04:05 02/01/2006"))
 
