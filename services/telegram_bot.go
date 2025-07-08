@@ -112,7 +112,7 @@ func (s *TelegramBotService) StartBot() {
 		}
 
 		// Log tin nhắn nhận được
-		log.Printf("Nhận tin nhắn từ %s: %s", update.Message.From.UserName, update.Message.Text)
+		log.Printf("Nhận tin nhắn từ %s , %s: %s", update.Message.From.UserName, update.Message.Chat.Title, update.Message.Text)
 
 		// Xử lý tin nhắn
 		s.handleMessage(update.Message)
