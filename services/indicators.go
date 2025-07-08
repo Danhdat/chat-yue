@@ -118,7 +118,7 @@ func (s *TechnicalAnalysisService) CalculateMACD(prices []float64) (float64, flo
 func (s *TechnicalAnalysisService) analyzeVolume(klines []models.KlineData) models.VolumeAnalysis {
 	var volumes []float64
 	for _, k := range klines {
-		v, err := strconv.ParseFloat(k.Volume, 64)
+		v, err := strconv.ParseFloat(k.QuoteAssetVolume, 64)
 		if err != nil {
 			continue
 		}
