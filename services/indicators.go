@@ -303,11 +303,19 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 
 	// Golden Cross: EMA9 crosses above EMA21 (in uptrend confirmed by EMA50)
 	if ema9 > ema21 && ema21 > ema50 {
-		analysis.Signals = append(analysis.Signals, "⭐ **GOLDEN CROSS**: EMA9 cắt lên EMA21 trong xu hướng tăng")
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			analysis.Signals = append(analysis.Signals, "⭐ **GOLDEN CROSS CONFIRMED**: EMA9 cắt lên EMA21 + Volume cao")
+		} else {
+			analysis.Signals = append(analysis.Signals, "⭐ **GOLDEN CROSS**: EMA9 cắt lên EMA21 (cần volume xác nhận)")
+		}
 
 		// Death Cross: EMA9 crosses below EMA21 (in downtrend confirmed by EMA50)
 	} else if ema9 < ema21 && ema21 < ema50 {
-		analysis.Signals = append(analysis.Signals, "💀 **DEATH CROSS**: EMA9 cắt xuống EMA21 trong xu hướng giảm")
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			analysis.Signals = append(analysis.Signals, "💀 **DEATH CROSS CONFIRMED**: EMA9 cắt xuống EMA21 + Volume cao")
+		} else {
+			analysis.Signals = append(analysis.Signals, "💀 **DEATH CROSS**: EMA9 cắt xuống EMA21 (cần volume xác nhận)")
+		}
 	}
 
 	// EMA21/EMA50 major crossovers
@@ -358,27 +366,43 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 	message += "\n**💡 KHUYẾN NGHỊ TỔNG HỢP:**\n"
 	message += fmt.Sprintf("- %s\n", analysis.Recommendation)
 	// Add RSI confirmation/divergence
-	if analysis.Direction == "bullish" && rsi < 30 {
-		message += "• 🎯 **RSI oversold + xu hướng tăng** = Cơ hội mua tốt!\n"
-	} else if analysis.Direction == "bearish" && rsi > 70 {
-		message += "• ⚠️ **RSI overbought + xu hướng giảm** = Tín hiệu bán mạnh!\n"
+	if analysis.Direction == "bullish" && rsi < 30 && volumeAnalysis.VolumeStrength != "WEAK" {
+		message += "• 🎯 **RSI oversold + xu hướng tăng + Volume OK** = Cơ hội mua XUẤT SẮC!\n"
+	} else if analysis.Direction == "bearish" && rsi > 70 && volumeAnalysis.VolumeStrength != "WEAK" {
+		message += "• ⚠️ **RSI overbought + xu hướng giảm + Volume cao** = Tín hiệu bán CỰC MẠNH!\n"
 	} else if analysis.Direction == "bullish" && rsi > 70 {
 		message += "• 🟡 **Xu hướng tăng nhưng RSI cao** = Cẩn thận với pullback\n"
 	} else if analysis.Direction == "bearish" && rsi < 30 {
 		message += "• 🟡 **Xu hướng giảm nhưng RSI thấp** = Có thể bounce ngắn hạn\n"
 	}
 
+	// Volume-specific warnings
+	if volumeAnalysis.VolumeStrength == "WEAK" {
+		message += "• ⚠️ **Volume thấp** = Cẩn thận với fake moves, chờ volume xác nhận\n"
+	}
+
 	// Block quản lý rủi ro
 	message += "\n**⚠️ QUẢN LÝ RỦI RO:**\n"
 	if analysis.Direction == "bullish" {
 		message += fmt.Sprintf("• Stop-loss: Dưới EMA21 (~$%s)\n", utils.FormatPriceN(ema21, 4))
-		message += "• Take-profit: Theo dõi RSI và EMA crossover\n"
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			message += "• Take-profit: Aggressive targets (volume support)\n"
+		} else {
+			message += "• Take-profit: Conservative targets (thiếu volume)\n"
+		}
 	} else if analysis.Direction == "bearish" {
 		message += fmt.Sprintf("• Stop-loss: Trên EMA21 (~$%s)\n", utils.FormatPriceN(ema21, 4))
-		message += "• Target: Theo dõi support và EMA50\n"
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			message += "• Target: Aggressive shorts (volume support)\n"
+		} else {
+			message += "• Target: Conservative shorts (thiếu volume)\n"
+		}
 	} else {
 		message += "• Chờ breakout khỏi vùng tích luỹ\n"
-		message += fmt.Sprintf("• Watch level: EMA50 ($%s)\n", utils.FormatPriceN(ema50, 4))
+		message += fmt.Sprintf("• Theo dõi: EMA50 ($%s)\n", utils.FormatPriceN(ema50, 4))
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			message += "• ⚡ Volume cao = Breakout sắp diễn ra!\n"
+		}
 	}
 
 	// Block Volume
