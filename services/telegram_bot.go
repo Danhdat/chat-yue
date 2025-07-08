@@ -172,7 +172,8 @@ func (s *TelegramBotService) handlePriceCommand(chatID int64, symbol string) {
 	message += fmt.Sprintf("📈 **Thay đổi 24h:** %s (%s)\n",
 		utils.FormatPercentage(price.PriceChangePercentage24h), utils.FormatPrice(price.PriceChange24h))
 	message += fmt.Sprintf("📊 **Volume 24h:** $%s\n", utils.FormatVolume(price.Volume24h))
-	message += fmt.Sprintf("⏰ **Cập nhật:** %s", price.LastUpdated.Format("15:04:05 02/01/2006"))
+	loc := time.FixedZone("UTC+7", 7*60*60)
+	message += fmt.Sprintf("⏰ **Cập nhật:** %s", price.LastUpdated.In(loc).Format("15:04:05 02/01/2006"))
 
 	s.sendMessage(chatID, message)
 }

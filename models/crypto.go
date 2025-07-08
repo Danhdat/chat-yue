@@ -10,9 +10,17 @@ import (
 const (
 	RSI_PERIOD = 14
 	EMA_PERIOD = 20
+
+	// 3 EMA System
 	EMA_SHORT  = 9  // EMA ngắn hạn
 	EMA_MEDIUM = 21 // EMA trung hạn
 	EMA_LONG   = 50 // EMA dài hạn
+
+	// Volume Analysis
+	VOLUME_SMA_PERIOD = 21  // SMA của Volume (21 kỳ)
+	VOLUME_SPIKE_1_5X = 1.5 // Volume spike 1.5x
+	VOLUME_SPIKE_2X   = 2.0 // Volume spike 2x
+	VOLUME_SPIKE_3X   = 3.0 // Volume spike 3x
 )
 
 // CryptoPrice đại diện cho giá của một cryptocurrency
@@ -82,4 +90,14 @@ type TrendAnalysis struct {
 	Strength       string // "strong", "moderate", "weak"
 	Signals        []string
 	Recommendation string
+}
+
+// Volume Analysis Structure
+type VolumeAnalysis struct {
+	CurrentVolume  decimal.Decimal
+	VolumeSMA21    decimal.Decimal
+	VolumeRatio    decimal.Decimal
+	VolumeSignal   string
+	VolumeStrength string
+	Confirmation   string
 }

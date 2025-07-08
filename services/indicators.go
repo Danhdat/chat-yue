@@ -114,6 +114,64 @@ func (s *TechnicalAnalysisService) CalculateMACD(prices []float64) (float64, flo
 	return macd, signal, histogram
 }
 
+// analyzeVolume phân tích volume dựa trên ratio so với SMA
+func (s *TechnicalAnalysisService) analyzeVolume(klines []models.KlineData) models.VolumeAnalysis {
+	var volumes []float64
+	for _, k := range klines {
+		v, err := strconv.ParseFloat(k.Volume, 64)
+		if err != nil {
+			continue
+		}
+		volumes = append(volumes, v)
+	}
+	if len(volumes) < models.VOLUME_SMA_PERIOD+1 {
+		return models.VolumeAnalysis{}
+	}
+	currentVolume := decimal.NewFromFloat(volumes[len(volumes)-1])
+	var sum float64
+	for i := len(volumes) - models.VOLUME_SMA_PERIOD - 1; i < len(volumes)-1; i++ {
+		sum += volumes[i]
+	}
+	volumeSMA := sum / float64(models.VOLUME_SMA_PERIOD)
+	volumeSMA21 := decimal.NewFromFloat(volumeSMA)
+	var volumeSignal, volumeStrength, confirmation string
+	var volumeRatio decimal.Decimal
+	if volumeSMA > 0 {
+		volumeRatio = currentVolume.Div(decimal.NewFromFloat(volumeSMA))
+	} else {
+		volumeRatio = decimal.Zero
+	}
+	if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_3X)) {
+		volumeSignal = "🔥 VOLUME EXPLOSION"
+		volumeStrength = "EXTREME"
+		confirmation = "Tín hiệu Cực MẠNH - Breakout/Breakdown được xác nhận"
+	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_2X)) {
+		volumeSignal = "🚀 HIGH VOLUME SPIKE"
+		volumeStrength = "STRONG"
+		confirmation = "Tín hiệu MẠNH - Xu hướng được hỗ trợ tốt"
+	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_1_5X)) {
+		volumeSignal = "📈 ABOVE AVERAGE VOLUME"
+		volumeStrength = "MODERATE"
+		confirmation = "Tín hiệu TRUNG BÌNH - Có sự quan tâm tăng lên"
+	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(1.0)) {
+		volumeSignal = "🟡 NORMAL VOLUME"
+		volumeStrength = "NORMAL"
+		confirmation = "Volume bình thường - Theo dõi thêm"
+	} else {
+		volumeSignal = "📉 LOW VOLUME"
+		volumeStrength = "WEAK"
+		confirmation = "Volume thấp - Tín hiệu yếu, cẩn thận với fake move"
+	}
+	return models.VolumeAnalysis{
+		CurrentVolume:  currentVolume,
+		VolumeSMA21:    volumeSMA21,
+		VolumeRatio:    volumeRatio,
+		VolumeSignal:   volumeSignal,
+		VolumeStrength: volumeStrength,
+		Confirmation:   confirmation,
+	}
+}
+
 // AnalyzeCrypto phân tích crypto với dữ liệu kline
 func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.KlineData, interval string) (string, error) {
 	if len(klines) == 0 {
@@ -141,6 +199,9 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 	ema21 := s.CalculateEMA(closePrices, models.EMA_MEDIUM)
 	ema50 := s.CalculateEMA(closePrices, models.EMA_LONG)
 
+	// Phân tích volume
+	volumeAnalysis := s.analyzeVolume(klines)
+
 	analysis := models.TrendAnalysis{
 		Signals: make([]string, 0),
 	}
@@ -157,16 +218,37 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 	// Hệ thống 3 EMA
 	if currentPrice > ema9 && ema9 > ema21 && ema21 > ema50 {
 		analysis.Direction = "bullish"
-		analysis.Strength = "strong"
-		analysis.Signals = append(analysis.Signals, "🚀 **STRONG BULLISH**: Giá > EMA9 > EMA21 > EMA50")
-		analysis.Signals = append(analysis.Signals, "✅ Tất cả EMA đều hướng lên và xếp chồng đúng thứ tự")
-		analysis.Recommendation = "🟢 **MUA/GIỮ** - Xu hướng tăng mạnh được xác nhận"
+		// Điều chỉnh strength dựa trên volume
+		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
+			analysis.Strength = "strong"
+			analysis.Signals = append(analysis.Signals, "🚀 **STRONG BULLISH**: Giá > EMA9 > EMA21 > EMA50")
+			analysis.Signals = append(analysis.Signals, "✅ Tất cả EMA đều hướng lên và xếp chồng đúng thứ tự")
+			analysis.Signals = append(analysis.Signals, "🔥 Volume cao xác nhận xu hướng mạnh")
+			analysis.Recommendation = "🟢 **MUA/GIỮ** - Xu hướng tăng mạnh được xác nhận bởi volume"
+		} else {
+			analysis.Strength = "moderate"
+			analysis.Signals = append(analysis.Signals, "📈 **MODERATE BULLISH**: Giá > EMA9 > EMA21 > EMA50")
+			analysis.Signals = append(analysis.Signals, "✅ Tất cả EMA đều hướng lên và xếp chồng đúng thứ tự")
+			analysis.Signals = append(analysis.Signals, "⚠️ Volume thấp - Cần theo dõi thêm")
+			analysis.Recommendation = "🟡 **CẨN THẬN MUA** - Xu hướng tăng nhưng volume chưa xác nhận"
+		}
+
 	} else if currentPrice < ema9 && ema9 < ema21 && ema21 < ema50 {
 		analysis.Direction = "bearish"
-		analysis.Strength = "strong"
-		analysis.Signals = append(analysis.Signals, "⚠️ **STRONG BEARISH**: Giá < EMA9 < EMA21 < EMA50")
-		analysis.Signals = append(analysis.Signals, "❌ Tất cả EMA đều hướng xuống và xếp chồng đúng thứ tự")
-		analysis.Recommendation = "🔴 **BÁN/ĐỨNG NGOÀI** - Xu hướng giảm mạnh được xác nhận"
+		// Điều chỉnh strength dựa trên volume
+		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
+			analysis.Strength = "strong"
+			analysis.Signals = append(analysis.Signals, "⚠️ **STRONG BEARISH**: Giá < EMA9 < EMA21 < EMA50")
+			analysis.Signals = append(analysis.Signals, "❌ Tất cả EMA đều hướng xuống và xếp chồng đúng thứ tự")
+			analysis.Signals = append(analysis.Signals, "🔥 Volume cao xác nhận xu hướng giảm mạnh")
+			analysis.Recommendation = "🔴 **BÁN/ĐỨNG NGOÀI** - Xu hướng giảm mạnh được xác nhận bởi volume"
+		} else {
+			analysis.Strength = "moderate"
+			analysis.Signals = append(analysis.Signals, "📉 **MODERATE BEARISH**: Giá < EMA9 < EMA21 < EMA50")
+			analysis.Signals = append(analysis.Signals, "❌ Tất cả EMA đều hướng xuống và xếp chồng đúng thứ tự")
+			analysis.Signals = append(analysis.Signals, "⚠️ Volume thấp - Cần theo dõi thêm")
+			analysis.Recommendation = "🟡 **CẨN THẬN BÁN** - Xu hướng giảm nhưng volume chưa xác nhận"
+		}
 	} else if currentPrice > ema9 && currentPrice > ema21 && ema21 > ema50 {
 		analysis.Direction = "bullish"
 		analysis.Strength = "moderate"
@@ -177,7 +259,12 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 		} else {
 			analysis.Signals = append(analysis.Signals, "⚠️ EMA9 < EMA21 - Động lượng chưa mạnh")
 		}
-		analysis.Recommendation = "🟡 **CẨN THẬN MUA** - Xu hướng tăng nhưng chưa mạnh"
+		// Volume affects recommendation
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			analysis.Recommendation = "🟢 **MUA** - Volume support xu hướng tăng"
+		} else {
+			analysis.Recommendation = "🟡 **CẨN THẬN MUA** - Thiếu volume chưa xác nhận"
+		}
 	} else if currentPrice < ema9 && currentPrice < ema21 && ema21 < ema50 {
 		analysis.Direction = "bearish"
 		analysis.Strength = "moderate"
@@ -188,7 +275,12 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 		} else {
 			analysis.Signals = append(analysis.Signals, "⚠️ EMA9 > EMA21 - Áp lực bán đang giảm")
 		}
-		analysis.Recommendation = "🟡 **CẨN THẬN BÁN** - Xu hướng giảm nhưng chưa rõ ràng"
+		// Volume affects recommendation
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			analysis.Recommendation = "🔴 **BÁN** - Volume support xu hướng giảm"
+		} else {
+			analysis.Recommendation = "🟡 **CẨN THẬN BÁN** - Thiếu volume chưa xác nhận"
+		}
 	} else {
 		analysis.Direction = "sideways"
 		analysis.Strength = "weak"
@@ -196,11 +288,17 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 
 		// Check for potential breakout signals
 		if currentPrice > ema50 {
-			analysis.Signals = append(analysis.Signals, "🟢 Giá vẫn trên EMA50 - Bias tăng dài hạn")
+			analysis.Signals = append(analysis.Signals, "🟢 Giá vẫn trên EMA50 - Xu hướng tăng dài hạn")
 		} else if currentPrice < ema50 {
-			analysis.Signals = append(analysis.Signals, "🔴 Giá dưới EMA50 - Bias giảm dài hạn")
+			analysis.Signals = append(analysis.Signals, "🔴 Giá dưới EMA50 - Xu hướng giảm dài hạn")
 		}
-		analysis.Recommendation = "⏳ **CHỜ TÍN HIỆU** - Thị trường đang consolidate"
+		// Volume can signal upcoming breakout
+		if volumeAnalysis.VolumeStrength == "STRONG" || volumeAnalysis.VolumeStrength == "EXTREME" {
+			analysis.Recommendation = "⚡ **CHỜ BREAKOUT** - Volume cao có thể báo hiệu breakout sắp tới"
+			analysis.Signals = append(analysis.Signals, "🔥 Volume tăng trong tích luỹ - Chuẩn bị breakout")
+		} else {
+			analysis.Recommendation = "⏳ **CHỜ TÍN HIỆU** - Thị trường đang tích luỹ"
+		}
 	}
 
 	// Golden Cross: EMA9 crosses above EMA21 (in uptrend confirmed by EMA50)
@@ -279,9 +377,22 @@ func (s *TechnicalAnalysisService) AnalyzeCrypto(symbol string, klines []models.
 		message += fmt.Sprintf("• Stop-loss: Trên EMA21 (~$%s)\n", utils.FormatPriceN(ema21, 4))
 		message += "• Target: Theo dõi support và EMA50\n"
 	} else {
-		message += "• Chờ breakout khỏi vùng consolidation\n"
+		message += "• Chờ breakout khỏi vùng tích luỹ\n"
 		message += fmt.Sprintf("• Watch level: EMA50 ($%s)\n", utils.FormatPriceN(ema50, 4))
 	}
+
+	// Block Volume
+	message += "\n**🔊 PHÂN TÍCH VOLUME:**\n"
+	if !volumeAnalysis.CurrentVolume.IsZero() {
+		message += fmt.Sprintf("- Volume hiện tại: %s\n", utils.FormatVolume(volumeAnalysis.CurrentVolume))
+		message += fmt.Sprintf("- SMA %d Volume: %s\n", models.VOLUME_SMA_PERIOD, utils.FormatVolume(volumeAnalysis.VolumeSMA21))
+		message += fmt.Sprintf("- Tỷ lệ Volume/SMA: x%s\n", volumeAnalysis.VolumeRatio.StringFixed(2))
+		message += fmt.Sprintf("- %s (%s)\n", volumeAnalysis.VolumeSignal, volumeAnalysis.VolumeStrength)
+		message += fmt.Sprintf("- %s\n", volumeAnalysis.Confirmation)
+	} else {
+		message += "- Không đủ dữ liệu volume để phân tích\n"
+	}
+
 	loc := time.FixedZone("UTC+7", 7*60*60)
 	// Thời gian cập nhật
 	message += fmt.Sprintf("\n⏰ **Cập nhật lúc:** %s", time.Now().In(loc).Format("15:04:05 02/01/2006"))
