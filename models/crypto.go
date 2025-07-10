@@ -101,3 +101,23 @@ type VolumeAnalysis struct {
 	VolumeStrength string
 	Confirmation   string
 }
+
+// AnalysisData chứa dữ liệu phân tích chi tiết
+type AnalysisData struct {
+	Symbol         string
+	Interval       string
+	CurrentPrice   float64
+	RSI            float64
+	EMA9           float64
+	EMA21          float64
+	EMA50          float64
+	MACD           float64
+	MACDSignal     float64
+	VolumeSMA      float64
+	Trend          string
+	Power          string
+	Signal         string
+	Recommendation string
+	VolumeSignal   string
+	VolumeAnalysis VolumeAnalysis
+}

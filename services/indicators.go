@@ -486,3 +486,133 @@ func (s *TechnicalAnalysisService) AssessRisk(indicators models.TechnicalIndicat
 		return "THẤP"
 	}
 }
+
+// GetAnalysisData trả về dữ liệu phân tích chi tiết
+func (s *TechnicalAnalysisService) GetAnalysisData(symbol string, klines []models.KlineData, interval string) (*models.AnalysisData, error) {
+	if len(klines) == 0 {
+		return nil, fmt.Errorf("không có dữ liệu cho %s", symbol)
+	}
+
+	// Chuyển đổi giá đóng cửa sang float64
+	var closePrices []float64
+	for _, kline := range klines {
+		price, err := strconv.ParseFloat(kline.Close, 64)
+		if err != nil {
+			continue
+		}
+		closePrices = append(closePrices, price)
+	}
+
+	if len(closePrices) < models.RSI_PERIOD+1 {
+		return nil, fmt.Errorf("không đủ dữ liệu để tính toán cho %s", symbol)
+	}
+
+	// Tính các chỉ báo
+	currentPrice := closePrices[len(closePrices)-1]
+	rsi := s.CalculateRSI(closePrices, models.RSI_PERIOD)
+	ema9 := s.CalculateEMA(closePrices, models.EMA_SHORT)
+	ema21 := s.CalculateEMA(closePrices, models.EMA_MEDIUM)
+	ema50 := s.CalculateEMA(closePrices, models.EMA_LONG)
+	macd, macdSignal, _ := s.CalculateMACD(closePrices)
+
+	// Phân tích volume
+	volumeAnalysis := s.analyzeVolume(klines)
+
+	// Tính volume SMA
+	var volumes []float64
+	for _, k := range klines {
+		v, err := strconv.ParseFloat(k.Volume, 64)
+		if err != nil {
+			continue
+		}
+		volumes = append(volumes, v)
+	}
+	volumeSMA := 0.0
+	if len(volumes) >= 20 {
+		sum := 0.0
+		for i := len(volumes) - 20; i < len(volumes); i++ {
+			sum += volumes[i]
+		}
+		volumeSMA = sum / 20
+	}
+
+	// Xác định trend và signal
+	trend := "sideways"
+	power := "moderate"
+	signal := "neutral"
+	recommendation := "watch"
+	volumeSignal := "normal"
+
+	if currentPrice > ema9 && ema9 > ema21 && ema21 > ema50 {
+		trend = "bullish"
+		signal = "buy"
+		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
+			power = "strong"
+			recommendation = "strong_buy"
+		} else {
+			recommendation = "cautious_buy"
+		}
+	} else if currentPrice < ema9 && ema9 < ema21 && ema21 < ema50 {
+		trend = "bearish"
+		signal = "sell"
+		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
+			power = "strong"
+			recommendation = "strong_sell"
+		} else {
+			recommendation = "cautious_sell"
+		}
+	} else if currentPrice > ema9 && currentPrice > ema21 && ema21 > ema50 {
+		trend = "bullish"
+		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
+			recommendation = "strong_buy"
+		} else {
+			recommendation = "cautious_buy"
+		}
+	} else if currentPrice < ema9 && currentPrice < ema21 && ema21 < ema50 {
+		trend = "bearish"
+		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
+			power = "strong"
+			recommendation = "strong_sell"
+		} else {
+			recommendation = "cautious_sell"
+		}
+	} else {
+		trend = "sideways"
+		power = "weak"
+		signal = "consolidation"
+		recommendation = "watch"
+	}
+
+	// Volume signal mapping
+	switch volumeAnalysis.VolumeSignal {
+	case "🔥 VOLUME EXPLOSION":
+		volumeSignal = "explosion"
+	case "🚀 HIGH VOLUME SPIKE":
+		volumeSignal = "high_spike"
+	case "📈 ABOVE AVERAGE VOLUME":
+		volumeSignal = "above_average"
+	case "🟡 NORMAL VOLUME":
+		volumeSignal = "normal"
+	case "📉 LOW VOLUME":
+		volumeSignal = "low"
+	}
+
+	return &models.AnalysisData{
+		Symbol:         symbol,
+		Interval:       interval,
+		CurrentPrice:   currentPrice,
+		RSI:            rsi,
+		EMA9:           ema9,
+		EMA21:          ema21,
+		EMA50:          ema50,
+		MACD:           macd,
+		MACDSignal:     macdSignal,
+		VolumeSMA:      volumeSMA,
+		Trend:          trend,
+		Power:          power,
+		Signal:         signal,
+		Recommendation: recommendation,
+		VolumeSignal:   volumeSignal,
+		VolumeAnalysis: volumeAnalysis,
+	}, nil
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"chatbtc/config"
+	"chatbtc/models"
 	"chatbtc/services"
 	"log"
 	"net/http"
@@ -25,6 +26,17 @@ func main() {
 	}
 
 	log.Println("🚀 Khởi động Crypto Analysis Bot...")
+
+	// Khởi tạo database
+	if err := models.InitDatabase(); err != nil {
+		log.Fatalf("❌ Lỗi kết nối database: %v", err)
+	}
+	defer models.CloseDatabase()
+
+	// Auto migrate database
+	if err := models.AutoMigrate(); err != nil {
+		log.Fatalf("❌ Lỗi migrate database: %v", err)
+	}
 
 	// Khởi tạo Telegram bot service
 	botService, err := services.NewTelegramBotService()
