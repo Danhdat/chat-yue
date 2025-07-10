@@ -61,7 +61,7 @@ func LoadConfig() {
 		CryptoAPIURL:     getEnv("CRYPTO_API_URL", "https://api.coingecko.com/api/v3"),
 		ServerPort:       getEnv("SERVER_PORT", "8080"),
 		LogLevel:         getEnv("LOG_LEVEL", "info"),
-		DBHost:           getEnv("DB_HOST", "localhost"),
+		DBHost:           getEnv("DB_HOST", ""),
 		DBPort:           getEnv("DB_PORT", "5432"),
 		DBName:           getEnv("DB_NAME", "cryptobot"),
 		DBUser:           getEnv("DB_USER", "postgres"),

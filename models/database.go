@@ -19,7 +19,7 @@ func InitDatabase() error {
 	cfg := config.AppConfig
 
 	// Tạo connection string
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=Asia/Ho_Chi_Minh",
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=require TimeZone=Asia/Ho_Chi_Minh",
 		cfg.DBHost,
 		cfg.DBPort,
 		cfg.DBUser,
