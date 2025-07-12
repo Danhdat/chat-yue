@@ -25,6 +25,7 @@ type TelegramBotService struct {
 	indicators *TechnicalAnalysisService
 	analysis   *AnalysisService
 	chatID     int64
+	channelID  string
 }
 
 // NewTelegramBotService tạo instance mới của service
@@ -88,13 +89,14 @@ func NewTelegramBotService() (*TelegramBotService, error) {
 			chatID = parsedChatID
 		}
 	}
-
+	channelID := "@yuealerts"
 	return &TelegramBotService{
 		bot:        bot,
 		cryptoAPI:  NewCryptoAPIService(),
 		indicators: NewTechnicalAnalysisService(),
 		analysis:   NewAnalysisService(),
 		chatID:     chatID,
+		channelID:  channelID,
 	}, nil
 }
 
@@ -421,6 +423,21 @@ func (s *TelegramBotService) sendMessage(chatID int64, text string) {
 	if err != nil {
 		log.Printf("Lỗi khi gửi tin nhắn: %v", err)
 	}
+}
+
+// sendMessage gửi tin nhắn đến channel
+
+func (s *TelegramBotService) SendTelegramToChannel(channelID, message string) {
+	log.Println("Sending message to channel: ", channelID, message)
+	msg := tgbotapi.NewMessageToChannel(channelID, message)
+	msg.ParseMode = "Markdown"
+	_, err := s.bot.Send(msg)
+	if err != nil {
+		log.Printf("Lỗi khi gửi tin nhắn đến channel: %v", err)
+	}
+}
+func (s *TelegramBotService) GetChannelID() string {
+	return s.channelID
 }
 
 // Stop dừng bot

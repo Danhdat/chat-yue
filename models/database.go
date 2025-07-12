@@ -73,6 +73,9 @@ func AutoMigrate() error {
 	err := DB.AutoMigrate(
 		&AnalysisRecord{},
 		&PriceHistory{},
+		&Symbol{},
+		&DataUpdate{},
+		&AutoVolumeRecord{},
 	)
 
 	if err != nil {

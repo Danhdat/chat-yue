@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -44,6 +45,16 @@ func main() {
 		log.Fatalf("❌ Lỗi khởi tạo bot: %v", err)
 	}
 
+	fetchService := services.NewFetcherService()
+	scheduler := services.NewScheduler(fetchService)
+	go scheduler.Start()
+
+	autoVolumeService := services.NewAutoVolumeService(botService)
+	scheduler2 := services.NewScheduler2(autoVolumeService)
+	go scheduler2.Start()
+	scheduler3 := services.NewScheduler3(autoVolumeService, botService.GetChannelID())
+	go scheduler3.Start()
+
 	// Tạo channel để nhận tín hiệu dừng
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
@@ -57,6 +68,13 @@ func main() {
 	// Chờ tín hiệu dừng
 	<-stopChan
 	log.Println("🛑 Đang dừng bot...")
+	// Gọi Stop cho các service nếu có
+	scheduler.Stop()
+	scheduler2.Stop()
+	scheduler3.Stop()
+	time.Sleep(2 * time.Second)
+	log.Println("🛑 Bot đã dừng")
+
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {

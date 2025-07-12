@@ -55,3 +55,16 @@ func (AnalysisRecord) TableName() string {
 func (PriceHistory) TableName() string {
 	return "price_histories"
 }
+
+type AutoVolumeRecord struct {
+	ID               uint    `gorm:"primaryKey"`
+	Symbol           string  `gorm:"index;not null"`
+	QuoteAssetVolume float64 `gorm:"not null"`
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	DeletedAt        gorm.DeletedAt `gorm:"index"`
+}
+
+func (AutoVolumeRecord) TableName() string {
+	return "auto_volume_record"
+}
