@@ -93,10 +93,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		if processedSymbols[symbol] {
 			continue
 		}
-
 		records22, _ := s.volumeRepo.GetLastNBySymbol(symbol, 22)
-		log.Println("records22 for symbol ", symbol, ": ", len(records22), "records")
-
 		// Kiểm tra nếu không có dữ liệu
 		if len(records22) == 0 {
 			continue
@@ -108,16 +105,11 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		}
 
 		volumeAnalysis := taService.analyzeVolumeFromFloat64(volumes)
-		log.Println("Volume analysis for ", symbol, ": ", volumeAnalysis.VolumeStrength)
-
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
 			// Lấy bản ghi MỚI NHẤT (records22[0])
 			latestRecord := records22[0]
-			log.Println("latestRecord: ", latestRecord)
-
 			message := fmt.Sprintf("[ALERT] Symbol: %s\nVolume: %s\nStrength: %s\nSignal: %s", latestRecord.Symbol, utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)), volumeAnalysis.VolumeStrength, volumeAnalysis.VolumeSignal)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
-			log.Printf("Đã gửi cảnh báo volume cho %s", latestRecord.Symbol)
 		}
 
 		// Đánh dấu symbol đã được xử lý
@@ -192,7 +184,6 @@ func NewScheduler2(autoVolumeService *AutoVolumeService) *Scheduler2 {
 }
 
 func (s *Scheduler2) Start() {
-	go s.Run()
 	log.Println("Scheduler Volume started")
 	// Chạy cập nhật định kỳ mỗi 4 giờ
 	ticker := time.NewTicker(4 * time.Hour)
