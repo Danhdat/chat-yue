@@ -215,36 +215,38 @@ func (s *TelegramBotService) handleAnalyzeCommand(chatID int64, interval string,
 
 	log.Printf("Đã lấy được %d điểm dữ liệu lịch sử với interval %s", len(klines), interval)
 
-	// Chỉ lưu nến mới nhất vào price history để tránh trùng lặp
-	if len(klines) > 0 {
-		latestKline := klines[len(klines)-1]
+	/*
+		// Chỉ lưu nến mới nhất vào price history để tránh trùng lặp
+		if len(klines) > 0 {
+			latestKline := klines[len(klines)-1]
 
-		// Chuyển đổi kiểu dữ liệu
-		open, _ := strconv.ParseFloat(latestKline.Open, 64)
-		high, _ := strconv.ParseFloat(latestKline.High, 64)
-		low, _ := strconv.ParseFloat(latestKline.Low, 64)
-		close, _ := strconv.ParseFloat(latestKline.Close, 64)
-		volume, _ := strconv.ParseFloat(latestKline.Volume, 64)
+			// Chuyển đổi kiểu dữ liệu
+			open, _ := strconv.ParseFloat(latestKline.Open, 64)
+			high, _ := strconv.ParseFloat(latestKline.High, 64)
+			low, _ := strconv.ParseFloat(latestKline.Low, 64)
+			close, _ := strconv.ParseFloat(latestKline.Close, 64)
+			volume, _ := strconv.ParseFloat(latestKline.Volume, 64)
 
-		// Chuyển đổi timestamp
-		openTime := time.Unix(latestKline.OpenTime/1000, 0)
+			// Chuyển đổi timestamp
+			openTime := time.Unix(latestKline.OpenTime/1000, 0)
 
-		err := s.analysis.SavePriceHistory(
-			symbol,
-			interval,
-			openTime,
-			open,
-			high,
-			low,
-			close,
-			volume,
-		)
-		if err != nil {
-			log.Printf("⚠️ Lỗi lưu price history: %v", err)
-		} else {
-			log.Printf("✅ Đã lưu nến mới nhất cho %s (%s)", symbol, interval)
+			err := s.analysis.SavePriceHistory(
+				symbol,
+				interval,
+				openTime,
+				open,
+				high,
+				low,
+				close,
+				volume,
+			)
+			if err != nil {
+				log.Printf("⚠️ Lỗi lưu price history: %v", err)
+			} else {
+				log.Printf("✅ Đã lưu nến mới nhất cho %s (%s)", symbol, interval)
+			}
 		}
-	}
+	*/
 
 	// Phân tích với service indicators mới
 	analysis, err := s.indicators.AnalyzeCrypto(symbol, klines, interval)
