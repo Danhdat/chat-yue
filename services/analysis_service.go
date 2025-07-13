@@ -22,6 +22,7 @@ func NewAnalysisService() *AnalysisService {
 
 // SaveAnalysis lưu kết quả phân tích vào database
 func (s *AnalysisService) SaveAnalysis(symbol, interval string, closePrice, volume, rsi, ema9, ema21, ema50, macd, macdSignal, volumeSMA float64, trend, power, signal, recommendation, volumeSignal string) error {
+	loc := time.FixedZone("UTC+7", 7*60*60)
 	record := &models.AnalysisRecord{
 		Symbol:         symbol,
 		Interval:       interval,
@@ -39,8 +40,8 @@ func (s *AnalysisService) SaveAnalysis(symbol, interval string, closePrice, volu
 		Signal:         signal,
 		Recommendation: recommendation,
 		VolumeSignal:   volumeSignal,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		CreatedAt:      time.Now().In(loc),
+		UpdatedAt:      time.Now().In(loc),
 	}
 
 	err := s.analysisRepo.Create(record)

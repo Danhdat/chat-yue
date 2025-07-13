@@ -55,23 +55,32 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 		if len(klines) > 22 {
 			recentKlines = klines[len(klines)-22:]
 		}
+
+		loc := time.FixedZone("UTC+7", 7*60*60)
+
+		// Tạo slice để lưu tất cả records cho symbol này
+		var records []models.AutoVolumeRecord
+
 		for _, k := range recentKlines {
 			quoteAssetVolumeStr := k[7].(string)
 			quoteAssetVolume, _ := strconv.ParseFloat(quoteAssetVolumeStr, 64)
 
-			record := &models.AutoVolumeRecord{
+			record := models.AutoVolumeRecord{
 				Symbol:           symbol,
 				QuoteAssetVolume: quoteAssetVolume,
-				CreatedAt:        time.Now(),
-				UpdatedAt:        time.Now(),
+				CreatedAt:        time.Now().In(loc),
+				UpdatedAt:        time.Now().In(loc),
 			}
-			if err := s.volumeRepo.Upsert(record); err != nil {
-				fmt.Printf("Lỗi lưu DB %s: %v\n", symbol, err)
-			} else {
-				fmt.Printf("Đã lưu volume cho %s: %f\n", symbol, quoteAssetVolume)
-			}
+			records = append(records, record)
 		}
-		time.Sleep(1 * time.Second)
+
+		// Thay thế tất cả dữ liệu cũ bằng dữ liệu mới
+		if err := s.volumeRepo.ReplaceAllForSymbol(symbol, records); err != nil {
+			fmt.Printf("Lỗi lưu DB %s: %v\n", symbol, err)
+		} else {
+			fmt.Printf("Đã cập nhật %d records volume cho %s\n", len(records), symbol)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	return nil
 }
@@ -108,7 +117,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
 			// Lấy bản ghi MỚI NHẤT (records22[0])
 			latestRecord := records22[0]
-			message := fmt.Sprintf("[ALERT] Symbol: %s\nVolume: %s\nStrength: %s\nSignal: %s", latestRecord.Symbol, utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)), volumeAnalysis.VolumeStrength, volumeAnalysis.VolumeSignal)
+			message := fmt.Sprintf("💰[ALERT] Symbol: %s\n🚀Volume: %s\n🎯Strength: %s\n🔥Signal: %s", latestRecord.Symbol, utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)), volumeAnalysis.VolumeStrength, volumeAnalysis.VolumeSignal)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 		}
 
@@ -116,6 +125,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		processedSymbols[symbol] = true
 		time.Sleep(1 * time.Second)
 	}
+	time.Sleep(1 * time.Second)
 
 	return nil
 }
@@ -227,10 +237,9 @@ func NewScheduler3(autoVolumeService *AutoVolumeService, channelID string) *Sche
 }
 
 func (s *Scheduler3) Start() {
-	go s.Run()
 	for {
 		select {
-		case <-time.After(4*time.Hour + 10*time.Minute):
+		case <-time.After(4*time.Hour + 5*time.Minute):
 			go s.Run()
 		case <-s.stopChan:
 			log.Println("Scheduler stopped")

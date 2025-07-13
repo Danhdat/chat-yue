@@ -178,45 +178,36 @@ func (r *AutoVolumeRecordRepository) Create(record *AutoVolumeRecord) error {
 	return r.db.Create(record).Error
 }
 
-// Upsert lưu record mới hoặc cập nhật nếu đã tồn tại
-func (r *AutoVolumeRecordRepository) Upsert(record *AutoVolumeRecord) error {
-	// Tạo record mới
-	if err := r.db.Create(record).Error; err != nil {
+// ReplaceAllForSymbol xóa tất cả dữ liệu cũ của symbol và thêm dữ liệu mới
+func (r *AutoVolumeRecordRepository) ReplaceAllForSymbol(symbol string, records []AutoVolumeRecord) error {
+	// Bắt đầu transaction
+	tx := r.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Xóa tất cả dữ liệu cũ của symbol
+	if err := tx.Where("symbol = ?", symbol).Delete(&AutoVolumeRecord{}).Error; err != nil {
+		tx.Rollback()
 		return err
 	}
 
-	// Xóa các records cũ, chỉ giữ lại 22 records gần nhất
-	var count int64
-	r.db.Model(&AutoVolumeRecord{}).Where("symbol = ?", record.Symbol).Count(&count)
-
-	if count > 22 {
-		// Xóa records cũ nhất
-		var oldRecords []AutoVolumeRecord
-		r.db.Where("symbol = ?", record.Symbol).
-			Order("created_at ASC").
-			Limit(int(count - 22)).
-			Find(&oldRecords)
-
-		for _, oldRecord := range oldRecords {
-			r.db.Delete(&oldRecord)
+	// Thêm dữ liệu mới
+	if len(records) > 0 {
+		if err := tx.Create(&records).Error; err != nil {
+			tx.Rollback()
+			return err
 		}
 	}
 
-	return nil
-}
-
-func (r *AutoVolumeRecordRepository) GetAll() ([]AutoVolumeRecord, error) {
-	var records []AutoVolumeRecord
-	err := r.db.Find(&records).Error
-	return records, err
+	// Commit transaction
+	return tx.Commit().Error
 }
 
 func (r *AutoVolumeRecordRepository) GetLastNBySymbol(symbol string, n int) ([]AutoVolumeRecord, error) {
 	var records []AutoVolumeRecord
 	err := r.db.Where("symbol = ?", symbol).Order("created_at DESC").Limit(n).Find(&records).Error
-	// Đảo ngược slice để đúng thứ tự thời gian tăng dần
-	for i, j := 0, len(records)-1; i < j; i, j = i+1, j-1 {
-		records[i], records[j] = records[j], records[i]
-	}
 	return records, err
 }
