@@ -141,6 +141,7 @@ func (s *TechnicalAnalysisService) analyzeVolume(klines []models.KlineData) mode
 	} else {
 		volumeRatio = decimal.Zero
 	}
+
 	if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_3X)) {
 		volumeSignal = "🔥 VOLUME EXPLOSION"
 		volumeStrength = "EXTREME"

@@ -96,6 +96,8 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 
 	// Map để theo dõi symbols đã xử lý để tránh trùng lặp
 	processedSymbols := make(map[string]bool)
+	symbolSendCount := make(map[string]int)
+	loc := time.FixedZone("UTC+7", 7*60*60)
 
 	for _, symbol := range symbols {
 		// Kiểm tra nếu symbol đã được xử lý
@@ -117,7 +119,31 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
 			// Lấy bản ghi MỚI NHẤT (records22[0])
 			latestRecord := records22[0]
-			message := fmt.Sprintf("💰[ALERT] Symbol: %s\n🚀Volume: %s\n🎯Strength: %s\n🔥Signal: %s", latestRecord.Symbol, utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)), volumeAnalysis.VolumeStrength, volumeAnalysis.VolumeSignal)
+
+			// Lấy time hiện tại
+			currentTime := time.Now().In(loc)
+			formattedTime := currentTime.Format("2006-01-02 15:04:05")
+
+			//Đếm số lần gửi của symbol
+			symbolSendCount[latestRecord.Symbol]++
+			count := symbolSendCount[latestRecord.Symbol]
+
+			message := fmt.Sprintf("💰[ALERT] Symbol: %s\n"+
+				"📅 Time: %s\n"+
+				"🔄 Occurrences: %d\n"+
+				"🚀Volume: %s\n"+
+				"🚀SMA21: %s\n"+
+				"🎯Strength: %s\n"+
+				"🔥Signal: %s\n"+
+				"🔥Confirmation: %s",
+				latestRecord.Symbol,
+				formattedTime,
+				count,
+				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
+				utils.FormatVolume(volumeAnalysis.VolumeSMA21),
+				volumeAnalysis.VolumeStrength,
+				volumeAnalysis.VolumeSignal,
+				volumeAnalysis.Confirmation)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 		}
 
@@ -132,13 +158,17 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 
 // Hàm phân tích volume cho 1 giá trị float64 (tương thích với analyzeVolume)
 func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) models.VolumeAnalysis {
+	// ĐẢO NGƯỢC SLICE Ở ĐÂY nếu cần
+	for i, j := 0, len(volumes)-1; i < j; i, j = i+1, j-1 {
+		volumes[i], volumes[j] = volumes[j], volumes[i]
+	}
 	if len(volumes) < models.VOLUME_SMA_PERIOD+1 {
 		return models.VolumeAnalysis{}
 	}
 	// Chuyển sang decimal.Decimal để dùng lại logic cũ nếu cần
 	currentVolume := decimal.NewFromFloat(volumes[len(volumes)-1])
 	var sum float64
-	for i := len(volumes) - models.VOLUME_SMA_PERIOD - 1; i < len(volumes)-1; i++ {
+	for i := len(volumes) - models.VOLUME_SMA_PERIOD; i < len(volumes); i++ {
 		sum += volumes[i]
 	}
 	volumeSMA := sum / float64(models.VOLUME_SMA_PERIOD)
@@ -149,15 +179,15 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 	} else {
 		volumeRatio = decimal.Zero
 	}
-	if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(3.0)) {
+	if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_3X)) {
 		volumeSignal = "🔥 VOLUME EXPLOSION"
 		volumeStrength = "EXTREME"
 		confirmation = "Tín hiệu Cực MẠNH - Breakout/Breakdown được xác nhận"
-	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(2.0)) {
+	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_2X)) {
 		volumeSignal = "🚀 HIGH VOLUME SPIKE"
 		volumeStrength = "STRONG"
 		confirmation = "Tín hiệu MẠNH - Xu hướng được hỗ trợ tốt"
-	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(1.5)) {
+	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_1_5X)) {
 		volumeSignal = "📈 ABOVE AVERAGE VOLUME"
 		volumeStrength = "MODERATE"
 		confirmation = "Tín hiệu TRUNG BÌNH - Có sự quan tâm tăng lên"
@@ -237,6 +267,7 @@ func NewScheduler3(autoVolumeService *AutoVolumeService, channelID string) *Sche
 }
 
 func (s *Scheduler3) Start() {
+	go s.Run()
 	for {
 		select {
 		case <-time.After(4*time.Hour + 5*time.Minute):

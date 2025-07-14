@@ -144,7 +144,7 @@ func (r *SymbolRepository) GetSymbolByBaseAsset(baseAsset string) ([]Symbol, err
 
 func (r *SymbolRepository) SaveToDatabase(symbols []Symbol) error {
 	// Xoá dữ liệu cũ
-	if err := r.db.Where("1 = 1").Delete(&Symbol{}).Error; err != nil {
+	if err := r.db.Unscoped().Where("1 = 1").Delete(&Symbol{}).Error; err != nil {
 		return err
 	}
 	// Lưu dữ liệu mới
@@ -189,7 +189,7 @@ func (r *AutoVolumeRecordRepository) ReplaceAllForSymbol(symbol string, records 
 	}()
 
 	// Xóa tất cả dữ liệu cũ của symbol
-	if err := tx.Where("symbol = ?", symbol).Delete(&AutoVolumeRecord{}).Error; err != nil {
+	if err := tx.Unscoped().Where("symbol = ?", symbol).Delete(&AutoVolumeRecord{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
