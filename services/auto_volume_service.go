@@ -36,7 +36,7 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 	}
 	for _, symbol := range symbols {
 		// Lấy dữ liệu kline
-		url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=4h&limit=22", symbol)
+		url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=1h&limit=22", symbol)
 		resp, err := http.Get(url)
 		if err != nil {
 			fmt.Printf("Lỗi lấy dữ liệu %s: %v\n", symbol, err)
@@ -225,8 +225,9 @@ func NewScheduler2(autoVolumeService *AutoVolumeService) *Scheduler2 {
 
 func (s *Scheduler2) Start() {
 	log.Println("Scheduler Volume started")
-	// Chạy cập nhật định kỳ mỗi 4 giờ
-	ticker := time.NewTicker(4 * time.Hour)
+	go s.Run()
+	// Chạy cập nhật định kỳ mỗi 1 giờ
+	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
@@ -270,7 +271,7 @@ func (s *Scheduler3) Start() {
 	go s.Run()
 	for {
 		select {
-		case <-time.After(4*time.Hour + 5*time.Minute):
+		case <-time.After(1*time.Hour + 3*time.Minute):
 			go s.Run()
 		case <-s.stopChan:
 			log.Println("Scheduler stopped")
