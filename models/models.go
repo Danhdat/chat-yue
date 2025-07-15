@@ -60,6 +60,8 @@ type AutoVolumeRecord struct {
 	ID               uint    `gorm:"primaryKey"`
 	Symbol           string  `gorm:"index;not null"`
 	QuoteAssetVolume float64 `gorm:"not null"`
+	OpenPrice        float64 `gorm:"not null"`
+	ClosePrice       float64 `gorm:"not null"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
@@ -67,4 +69,13 @@ type AutoVolumeRecord struct {
 
 func (AutoVolumeRecord) TableName() string {
 	return "auto_volume_record"
+}
+
+func (r *AutoVolumeRecord) Candlestick() float64 {
+	// 1: green, 0: red
+	if r.ClosePrice > r.OpenPrice {
+		return 1
+	} else {
+		return 0
+	}
 }

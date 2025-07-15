@@ -64,10 +64,16 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 		for _, k := range recentKlines {
 			quoteAssetVolumeStr := k[7].(string)
 			quoteAssetVolume, _ := strconv.ParseFloat(quoteAssetVolumeStr, 64)
+			openPriceStr := k[1].(string)
+			openPrice, _ := strconv.ParseFloat(openPriceStr, 64)
+			closePriceStr := k[4].(string)
+			closePrice, _ := strconv.ParseFloat(closePriceStr, 64)
 
 			record := models.AutoVolumeRecord{
 				Symbol:           symbol,
 				QuoteAssetVolume: quoteAssetVolume,
+				OpenPrice:        openPrice,
+				ClosePrice:       closePrice,
 				CreatedAt:        time.Now().In(loc),
 				UpdatedAt:        time.Now().In(loc),
 			}
@@ -96,7 +102,6 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 
 	// Map để theo dõi symbols đã xử lý để tránh trùng lặp
 	processedSymbols := make(map[string]bool)
-	symbolSendCount := make(map[string]int)
 	loc := time.FixedZone("UTC+7", 7*60*60)
 
 	for _, symbol := range symbols {
@@ -119,31 +124,46 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
 			// Lấy bản ghi MỚI NHẤT (records22[0])
 			latestRecord := records22[0]
+			// lấy bản ghi cây nến thứ 21
+			record21 := records22[1]
+			// lấy bản ghi cây nến thứ 20
+			record20 := records22[2]
 
 			// Lấy time hiện tại
 			currentTime := time.Now().In(loc)
 			formattedTime := currentTime.Format("2006-01-02 15:04:05")
 
-			//Đếm số lần gửi của symbol
-			symbolSendCount[latestRecord.Symbol]++
-			count := symbolSendCount[latestRecord.Symbol]
+			//Mô hình
+			var confirmation1, confirmation2 string
+			if record20.Candlestick() == 0 && record21.Candlestick() == 1 && record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.5 {
+				confirmation1 = "✅Mô hình Bullish Engulfing"
+				confirmation2 = "✅Đây là một tín hiệu đảo chiều tăng giá rất mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng giảm. Nó cho thấy phe mua đã hoàn toàn áp đảo phe bán"
+			} else if record20.Candlestick() == 1 && record21.Candlestick() == 0 && record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.5 {
+				confirmation1 = "✅Mô hình Bearish Engulfing"
+				confirmation2 = "✅Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua"
+			} else {
+				confirmation1 = "Chưa xác định"
+			}
 
-			message := fmt.Sprintf("💰[ALERT] Symbol: %s\n"+
+			message := fmt.Sprintf("💰*[ALERT]* Symbol: %s\n"+
 				"📅 Time: %s\n"+
-				"🔄 Occurrences: %d\n"+
 				"🚀Volume: %s\n"+
 				"🚀SMA21: %s\n"+
+				"🚀Price: %s\n"+
 				"🎯Strength: %s\n"+
 				"🔥Signal: %s\n"+
+				"🔥Pattern: %s\n"+
 				"🔥Confirmation: %s",
 				latestRecord.Symbol,
 				formattedTime,
-				count,
 				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
 				utils.FormatVolume(volumeAnalysis.VolumeSMA21),
+				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				volumeAnalysis.VolumeStrength,
 				volumeAnalysis.VolumeSignal,
-				volumeAnalysis.Confirmation)
+				confirmation1,
+				confirmation2,
+			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 		}
 
@@ -171,8 +191,10 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 	for i := len(volumes) - models.VOLUME_SMA_PERIOD; i < len(volumes); i++ {
 		sum += volumes[i]
 	}
+	log.Println("currentVolume:", currentVolume)
 	volumeSMA := sum / float64(models.VOLUME_SMA_PERIOD)
 	var volumeSignal, volumeStrength, confirmation string
+	confirmation = "null"
 	var volumeRatio decimal.Decimal
 	if volumeSMA > 0 {
 		volumeRatio = currentVolume.Div(decimal.NewFromFloat(volumeSMA))
@@ -182,11 +204,9 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 	if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_3X)) {
 		volumeSignal = "🔥 VOLUME EXPLOSION"
 		volumeStrength = "EXTREME"
-		confirmation = "Tín hiệu Cực MẠNH - Breakout/Breakdown được xác nhận"
 	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_2X)) {
 		volumeSignal = "🚀 HIGH VOLUME SPIKE"
 		volumeStrength = "STRONG"
-		confirmation = "Tín hiệu MẠNH - Xu hướng được hỗ trợ tốt"
 	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_1_5X)) {
 		volumeSignal = "📈 ABOVE AVERAGE VOLUME"
 		volumeStrength = "MODERATE"
@@ -194,11 +214,9 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(1.0)) {
 		volumeSignal = "🟡 NORMAL VOLUME"
 		volumeStrength = "NORMAL"
-		confirmation = "Volume bình thường - Theo dõi thêm"
 	} else {
 		volumeSignal = "📉 LOW VOLUME"
 		volumeStrength = "WEAK"
-		confirmation = "Volume thấp - Tín hiệu yếu, cẩn thận với fake move"
 	}
 	return models.VolumeAnalysis{
 		CurrentVolume:  currentVolume,
