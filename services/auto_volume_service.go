@@ -164,7 +164,8 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"🎯Strength: %s\n"+
 				"🔥Signal: %s\n"+
 				"🔥Pattern: %s %s\n"+
-				"🔥Confirmation: %s\n %s",
+				"🔥Confirmation: %s\n %s\n"+
+				"Check record21 %d , record20 %d",
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
 				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
@@ -174,6 +175,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				volumeAnalysis.VolumeSignal,
 				pattern1, pattern2,
 				confirmation1, confirmation2,
+				record21.ID, record20.ID,
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 		}
