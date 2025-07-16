@@ -205,6 +205,8 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 		sum += volumes[i]
 	}
 	volumeSMA := sum / float64(models.VOLUME_SMA_PERIOD)
+	log.Println("volumes:", volumes)
+	log.Println("SUM:", sum)
 	var volumeSignal, volumeStrength, confirmation string
 	confirmation = "null"
 	var volumeRatio decimal.Decimal
