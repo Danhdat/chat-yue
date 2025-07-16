@@ -1,6 +1,7 @@
 package models
 
 import (
+	"math"
 	"time"
 
 	"gorm.io/gorm"
@@ -62,6 +63,8 @@ type AutoVolumeRecord struct {
 	QuoteAssetVolume float64 `gorm:"not null"`
 	OpenPrice        float64 `gorm:"not null"`
 	ClosePrice       float64 `gorm:"not null"`
+	HighPrice        float64 `gorm:"not null"`
+	LowPrice         float64 `gorm:"not null"`
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
@@ -77,5 +80,46 @@ func (r *AutoVolumeRecord) Candlestick() float64 {
 		return 1
 	} else {
 		return 0
+	}
+}
+
+func (r *AutoVolumeRecord) CandlestickBody() float64 {
+	return math.Abs(r.ClosePrice - r.OpenPrice)
+}
+
+func (r *AutoVolumeRecord) CandlestickLength() float64 {
+	return r.HighPrice - r.LowPrice
+}
+
+func (r *AutoVolumeRecord) CandlestickUpperShadow() float64 {
+	if r.ClosePrice > r.OpenPrice {
+		return r.HighPrice - r.ClosePrice
+	} else {
+		return r.HighPrice - r.OpenPrice
+	}
+}
+
+func (r *AutoVolumeRecord) CandlestickLowerShadow() float64 {
+	if r.ClosePrice > r.OpenPrice {
+		return r.OpenPrice - r.LowPrice
+	} else {
+		return r.ClosePrice - r.LowPrice
+	}
+}
+
+func (r *AutoVolumeRecord) IsCandlestickBodyLong(avgLength float64, multiplier float64) bool {
+	return r.CandlestickBody() > avgLength*multiplier
+}
+
+func (r *AutoVolumeRecord) IsCandlestickBodyShort(avgLength float64, multiplier float64) bool {
+	return r.CandlestickBody() < avgLength*multiplier
+}
+
+// Tính toán điểm ở giữa cây nến
+func (r *AutoVolumeRecord) CandlestBodyMidpoint() float64 {
+	if r.OpenPrice >= r.ClosePrice { // green candlestick
+		return r.OpenPrice + (r.ClosePrice-r.OpenPrice)/2
+	} else { // red candlestick
+		return r.ClosePrice + (r.OpenPrice-r.ClosePrice)/2
 	}
 }

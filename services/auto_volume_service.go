@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -68,12 +69,18 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 			openPrice, _ := strconv.ParseFloat(openPriceStr, 64)
 			closePriceStr := k[4].(string)
 			closePrice, _ := strconv.ParseFloat(closePriceStr, 64)
+			highPriceStr := k[2].(string)
+			highPrice, _ := strconv.ParseFloat(highPriceStr, 64)
+			lowPriceStr := k[3].(string)
+			lowPrice, _ := strconv.ParseFloat(lowPriceStr, 64)
 
 			record := models.AutoVolumeRecord{
 				Symbol:           symbol,
 				QuoteAssetVolume: quoteAssetVolume,
 				OpenPrice:        openPrice,
 				ClosePrice:       closePrice,
+				HighPrice:        highPrice,
+				LowPrice:         lowPrice,
 				CreatedAt:        time.Now().In(loc),
 				UpdatedAt:        time.Now().In(loc),
 			}
@@ -119,6 +126,14 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		for _, r := range records22 {
 			volumes = append(volumes, r.QuoteAssetVolume)
 		}
+		//chỉ tới cây nến 21
+		var totalCandlestickLength float64 = 0
+		var totalCandlestickBody float64 = 0
+		for _, r := range records22[1:] {
+			totalCandlestickLength += r.CandlestickLength()
+			totalCandlestickBody += r.CandlestickBody()
+		}
+		averageCandlestickBody := totalCandlestickBody / float64(len(records22)-1)
 
 		volumeAnalysis := taService.analyzeVolumeFromFloat64(volumes)
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
@@ -133,17 +148,13 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			currentTime := time.Now().In(loc)
 			formattedTime := currentTime.Format("2006-01-02 15:04:05")
 
-			//Mô hình
-			var confirmation1, confirmation2 string
-			if record20.Candlestick() == 0 && record21.Candlestick() == 1 && record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.5 {
-				confirmation1 = "✅Mô hình Bullish Engulfing"
-				confirmation2 = "✅Đây là một tín hiệu đảo chiều tăng giá rất mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng giảm. Nó cho thấy phe mua đã hoàn toàn áp đảo phe bán"
-			} else if record20.Candlestick() == 1 && record21.Candlestick() == 0 && record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.5 {
-				confirmation1 = "✅Mô hình Bearish Engulfing"
-				confirmation2 = "✅Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua"
-			} else {
-				confirmation1 = "Chưa xác định"
-			}
+			// Phân tích mô hình
+			engulfingResult := detectEngulfing(record20, record21)
+			confirmation1 := engulfingResult.Confirmation
+			pattern1 := engulfingResult.Pattern
+			piercingResult := detectPiercingPattern(record20, record21, averageCandlestickBody)
+			confirmation2 := piercingResult.Confirmation
+			pattern2 := piercingResult.Pattern
 
 			message := fmt.Sprintf("💰*[ALERT]* Symbol: %s\n"+
 				"📅 Time: %s\n"+
@@ -152,17 +163,17 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"🚀Price: %s\n"+
 				"🎯Strength: %s\n"+
 				"🔥Signal: %s\n"+
-				"🔥Pattern: %s\n"+
-				"🔥Confirmation: %s",
-				latestRecord.Symbol,
+				"🔥Pattern: %s %s\n"+
+				"🔥Confirmation: %s\n %s",
+				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
 				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
 				utils.FormatVolume(volumeAnalysis.VolumeSMA21),
 				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				volumeAnalysis.VolumeStrength,
 				volumeAnalysis.VolumeSignal,
-				confirmation1,
-				confirmation2,
+				pattern1, pattern2,
+				confirmation1, confirmation2,
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 		}
@@ -226,6 +237,53 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 		VolumeStrength: volumeStrength,
 		Confirmation:   confirmation,
 	}
+}
+
+type PatternDetectionResult struct {
+	Pattern      string
+	Confirmation string
+	IsDetected   bool
+}
+
+func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectionResult {
+	if record20.Candlestick() == 0 &&
+		record21.Candlestick() == 1 &&
+		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
+		record21.OpenPrice < record20.ClosePrice &&
+		record21.ClosePrice > record20.OpenPrice {
+		return PatternDetectionResult{
+			Pattern:      "⚙️ Mô hình Bullish Engulfing",
+			Confirmation: "✅ Đây là một tín hiệu đảo chiều tăng giá rất mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng giảm. Nó cho thấy phe mua đã hoàn toàn áp đảo phe bán",
+			IsDetected:   true,
+		}
+	} else if record20.Candlestick() == 1 &&
+		record21.Candlestick() == 0 &&
+		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
+		record21.OpenPrice > record20.ClosePrice &&
+		record21.ClosePrice < record20.OpenPrice {
+		return PatternDetectionResult{
+			Pattern:      "⚙️ Mô hình Bearish Engulfing",
+			Confirmation: "❎ Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua",
+			IsDetected:   true,
+		}
+	}
+	return PatternDetectionResult{IsDetected: false}
+}
+
+func detectPiercingPattern(record20, record21 models.AutoVolumeRecord, averageCandlestickBody float64) PatternDetectionResult {
+	if record20.Candlestick() == 0 &&
+		record20.IsCandlestickBodyLong(averageCandlestickBody, 1.5) &&
+		record21.Candlestick() == 1 &&
+		record21.OpenPrice < record20.ClosePrice && // Nến 2 mở cửa dưới giá đóng cửa nến 1 (có thể mở dưới cả low)
+		record21.ClosePrice > record20.CandlestBodyMidpoint() && // Nến 2 đóng cửa trên điểm giữa thân nến 1
+		record21.ClosePrice < record20.OpenPrice { // Nến 2 đóng cửa dưới giá mở cửa nến 1 (không phải nhấn chìm) {
+		return PatternDetectionResult{
+			Pattern:      "⚙️ Mô hình Piercing Pattern",
+			Confirmation: "✅ Tín hiệu đảo chiều tăng giá. Phe mua đã giành lại quyền kiểm soát sau một đợt giảm giá mạnh",
+			IsDetected:   true,
+		}
+	}
+	return PatternDetectionResult{IsDetected: false}
 }
 
 type Scheduler2 struct {
