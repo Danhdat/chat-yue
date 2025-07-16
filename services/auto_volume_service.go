@@ -202,7 +202,6 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 	for i := len(volumes) - models.VOLUME_SMA_PERIOD; i < len(volumes); i++ {
 		sum += volumes[i]
 	}
-	log.Println("currentVolume:", currentVolume)
 	volumeSMA := sum / float64(models.VOLUME_SMA_PERIOD)
 	var volumeSignal, volumeStrength, confirmation string
 	confirmation = "null"
@@ -301,7 +300,6 @@ func NewScheduler2(autoVolumeService *AutoVolumeService) *Scheduler2 {
 
 func (s *Scheduler2) Start() {
 	log.Println("Scheduler Volume started")
-	go s.Run()
 	// Chạy cập nhật định kỳ mỗi 1 giờ
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
