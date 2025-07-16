@@ -300,13 +300,21 @@ func NewScheduler2(autoVolumeService *AutoVolumeService) *Scheduler2 {
 
 func (s *Scheduler2) Start() {
 	log.Println("Scheduler Volume started")
-	// Chạy cập nhật định kỳ mỗi 1 giờ
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
+	// Hàm helper để tính thời gian đến giờ tiếp theo
+	nextHour := func() time.Time {
+		now := time.Now()
+		next := now.Truncate(time.Hour).Add(time.Hour)
+		return next
+	}
+	// Tạo timer với thời gian đến giờ tiếp theo
+	timer := time.NewTimer(time.Until(nextHour()))
+	defer timer.Stop()
 	for {
 		select {
-		case <-ticker.C:
+		case <-timer.C:
 			go s.Run()
+			// Đặt lại timer cho giờ tiếp theo
+			timer.Reset(time.Until(nextHour()))
 		case <-s.stopChan:
 			log.Println("Scheduler stopped")
 			return
@@ -342,11 +350,21 @@ func NewScheduler3(autoVolumeService *AutoVolumeService, channelID string) *Sche
 }
 
 func (s *Scheduler3) Start() {
-	go s.Run()
+	// Hàm helper để tính thời gian đến giờ:02 phút tiếp theo
+	nextSchedule := func() time.Time {
+		now := time.Now()
+		// Cắt lẻ đến giờ, sau đó thêm 1 giờ + 2 phút (ví dụ: 8:30 → 9:02:00)
+		next := now.Truncate(time.Hour).Add(time.Hour + 2*time.Minute)
+		return next
+	}
+	// Tạo timer với thời gian đến lần chạy tiếp theo (9:02:00 nếu now là 8:30:00)
+	timer := time.NewTimer(time.Until(nextSchedule()))
+	defer timer.Stop()
 	for {
 		select {
-		case <-time.After(1*time.Hour + 3*time.Minute):
+		case <-timer.C:
 			go s.Run()
+			timer.Reset(time.Until(nextSchedule()))
 		case <-s.stopChan:
 			log.Println("Scheduler stopped")
 			return
