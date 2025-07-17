@@ -37,7 +37,7 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 	}
 	for _, symbol := range symbols {
 		// Lấy dữ liệu kline
-		url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=1h&limit=22", symbol)
+		url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=1h&limit=23", symbol)
 		resp, err := http.Get(url)
 		if err != nil {
 			fmt.Printf("Lỗi lấy dữ liệu %s: %v\n", symbol, err)
@@ -51,14 +51,14 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 			fmt.Printf("Lỗi parse dữ liệu %s: %v\n", symbol, err)
 			continue
 		}
-		// Lấy 22 nến gần nhất
+		// Loại bỏ cây nến cuối cùng (chưa đóng) nếu có nhiều hơn 1 nến
+		if len(klines) > 1 {
+			klines = klines[:len(klines)-1]
+		}
+		// Lấy 22 nến đã đóng gần nhất
 		recentKlines := klines
 		if len(klines) > 22 {
 			recentKlines = klines[len(klines)-22:]
-		}
-		// Loại bỏ cây nến cuối cùng (chưa đóng) nếu có nhiều hơn 1 nến
-		if len(recentKlines) > 1 {
-			recentKlines = recentKlines[:len(recentKlines)-1]
 		}
 
 		loc := time.FixedZone("UTC+7", 7*60*60)
@@ -122,7 +122,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		if processedSymbols[symbol] {
 			continue
 		}
-		records22, _ := s.volumeRepo.GetLastNBySymbol(symbol, 22)
+		records22, _ := s.volumeRepo.GetLastNBySymbol(symbol, 23)
 		// Kiểm tra nếu không có dữ liệu
 		if len(records22) == 0 {
 			continue
