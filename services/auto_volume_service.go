@@ -155,6 +155,9 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			formattedTime := currentTime.Format("2006-01-02 15:04:05")
 
 			// Phân tích mô hình
+			breakoutResult := detectBreakout(records22, averageCandlestickBody)
+			confirmation3 := breakoutResult.Confirmation
+			pattern3 := breakoutResult.Pattern
 			engulfingResult := detectEngulfing(record20, record21)
 			confirmation1 := engulfingResult.Confirmation
 			pattern1 := engulfingResult.Pattern
@@ -169,8 +172,8 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"🚀Price: %s\n"+
 				"🎯Strength: %s\n"+
 				"🔥Signal: %s\n"+
-				"🔥Pattern: %s %s\n"+
-				"🔥Confirmation: %s\n %s\n"+
+				"🔥Pattern: %s %s %s\n"+
+				"🔥Confirmation: %s %s %s\n"+
 				"Check record21 %d , record20 %d",
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
@@ -179,8 +182,8 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				volumeAnalysis.VolumeStrength,
 				volumeAnalysis.VolumeSignal,
-				pattern1, pattern2,
-				confirmation1, confirmation2,
+				pattern1, pattern2, pattern3,
+				confirmation1, confirmation2, confirmation3,
 				record21.ID, record20.ID,
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
@@ -294,6 +297,55 @@ func detectPiercingPattern(record20, record21 models.AutoVolumeRecord, averageCa
 		}
 	}
 	return PatternDetectionResult{IsDetected: false}
+}
+
+func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody float64) PatternDetectionResult {
+	if len(records) < 8 { // Cần ít nhất 8 nến để có nến 15-19
+		return PatternDetectionResult{IsDetected: false}
+	}
+	record20 := records[2]
+	record21 := records[1]
+	// Tính resistance level (cao nhất của 5 nến trước nến hiện tại)
+	resistance := calculateResistance(records)
+	if record21.Candlestick() == 1 &&
+		record21.IsCandlestickBodyLong(averageCandlestickBody, 1.5) &&
+		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
+		record20.ClosePrice < resistance && // Nến trước chưa phá vỡ
+		record21.ClosePrice > resistance { // Nến hiện tại phá vỡ
+		return PatternDetectionResult{
+			Pattern:      "⚙️ Mô hình Breakout",
+			Confirmation: "✅ Tín hiệu breakout: Giá đóng cửa vượt qua resistance (cao nhất 5 nến trước)",
+			IsDetected:   true,
+		}
+	}
+	log.Println("resistance:", resistance)
+	return PatternDetectionResult{IsDetected: false}
+}
+
+// Tính resistance level (cao nhất của 5 nến trước nến hiện tại)
+func calculateResistance(records []models.AutoVolumeRecord) float64 {
+	// Kiểm tra điều kiện biên
+	if len(records) < 20 { // Cần ít nhất từ records[1] đến records[19]
+		return 0
+	}
+	// Xác định phạm vi nến 15-19 (tương ứng records[6] đến records[10])
+	// Vì:
+	// records[0] = nến 22 (mới nhất)
+	// CORRECTED RANGE: Nến 15-19 tương ứng với records22[7] đến records22[3]
+	startIdx := 7 // nến 15
+	endIdx := 3   // nến 19
+	if startIdx >= len(records) || endIdx >= len(records) {
+		return 0
+	}
+
+	resistance := records[startIdx].HighPrice
+	for i := startIdx; i >= endIdx; i-- { // Lặp từ nến 15 đến 19
+		if records[i].HighPrice > resistance {
+			resistance = records[i].HighPrice
+		}
+	}
+
+	return resistance
 }
 
 type Scheduler2 struct {
