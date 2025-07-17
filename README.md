@@ -54,6 +54,13 @@ go run main.go
   - So sánh volume nến mới nhất với SMA để phát hiện volume spike
   - Chỉ gửi cảnh báo khi volume đủ mạnh (theo ngưỡng cấu hình)
 
+## 📊 Logic lấy dữ liệu cho lệnh /analyze
+- Lệnh `/analyze` sẽ lấy dữ liệu nến gần nhất theo interval bạn chọn (ví dụ: 1h, 4h, 1d...)
+- **Lưu ý:** Mặc định, nhiều API (bao gồm cả Binance) sẽ trả về cây nến mới nhất, nhưng cây nến này có thể chưa đóng (vẫn đang chạy, dữ liệu chưa xác nhận hoàn toàn)
+- Nếu bạn phân tích theo cây nến chưa đóng, tín hiệu có thể bị "fakeout" (giả, không chính xác), vì giá và volume có thể thay đổi liên tục cho đến khi nến đóng lại
+- **Khuyến nghị:** Chỉ nên phân tích và ra quyết định dựa trên các cây nến đã đóng để đảm bảo tín hiệu chính xác, hạn chế bị nhiễu/fakeout
+- Nếu muốn chắc chắn, hãy kiểm tra hoặc chỉnh code để chỉ lấy và phân tích các cây nến đã đóng
+
 ## 🛠️ Các lệnh Telegram hỗ trợ
 - `/start` - Khởi động bot
 - `/help` - Hướng dẫn sử dụng

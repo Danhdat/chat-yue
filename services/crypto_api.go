@@ -143,28 +143,6 @@ func (s *CryptoAPIService) GetCurrentPrice(symbol string) (*models.CryptoPrice, 
 	return price, nil
 }
 
-// GetHistoricalData lấy dữ liệu lịch sử giá từ Binance
-func (s *CryptoAPIService) GetHistoricalData(symbol string, limit int) ([]models.PriceData, error) {
-	klines, err := s.GetKlineData(symbol, "1h", limit)
-	if err != nil {
-		return nil, err
-	}
-
-	var priceData []models.PriceData
-	for _, kline := range klines {
-		closePrice, _ := decimal.NewFromString(kline.Close)
-		volume, _ := decimal.NewFromString(kline.Volume)
-
-		priceData = append(priceData, models.PriceData{
-			Timestamp: time.Unix(kline.CloseTime/1000, 0),
-			Price:     closePrice,
-			Volume:    volume,
-		})
-	}
-
-	return priceData, nil
-}
-
 // helper function để lấy string từ map
 func getString(data map[string]interface{}, key string) string {
 	if val, exists := data[key]; !exists {
