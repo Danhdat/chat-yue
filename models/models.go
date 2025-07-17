@@ -60,6 +60,7 @@ func (PriceHistory) TableName() string {
 type AutoVolumeRecord struct {
 	ID               uint    `gorm:"primaryKey"`
 	Symbol           string  `gorm:"index;not null"`
+	OpenTime         float64 `gorm:"not null"`
 	QuoteAssetVolume float64 `gorm:"not null"`
 	OpenPrice        float64 `gorm:"not null"`
 	ClosePrice       float64 `gorm:"not null"`

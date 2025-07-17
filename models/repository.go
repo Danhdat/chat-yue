@@ -208,6 +208,6 @@ func (r *AutoVolumeRecordRepository) ReplaceAllForSymbol(symbol string, records 
 
 func (r *AutoVolumeRecordRepository) GetLastNBySymbol(symbol string, n int) ([]AutoVolumeRecord, error) {
 	var records []AutoVolumeRecord
-	err := r.db.Where("symbol = ?", symbol).Order("id DESC").Limit(n).Find(&records).Error
+	err := r.db.Where("symbol = ?", symbol).Order("open_time DESC").Limit(n).Find(&records).Error
 	return records, err
 }

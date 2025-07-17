@@ -63,6 +63,7 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 		var records []models.AutoVolumeRecord
 
 		for _, k := range recentKlines {
+			openTime := k[0].(float64)
 			quoteAssetVolumeStr := k[7].(string)
 			quoteAssetVolume, _ := strconv.ParseFloat(quoteAssetVolumeStr, 64)
 			openPriceStr := k[1].(string)
@@ -76,6 +77,7 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 
 			record := models.AutoVolumeRecord{
 				Symbol:           symbol,
+				OpenTime:         openTime,
 				QuoteAssetVolume: quoteAssetVolume,
 				OpenPrice:        openPrice,
 				ClosePrice:       closePrice,
@@ -207,6 +209,7 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 	volumeSMA := sum / float64(models.VOLUME_SMA_PERIOD)
 	log.Println("volumes:", volumes)
 	log.Println("SUM:", sum)
+	log.Println("volumeSMA:", volumeSMA)
 	var volumeSignal, volumeStrength, confirmation string
 	confirmation = "null"
 	var volumeRatio decimal.Decimal
