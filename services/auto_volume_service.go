@@ -56,6 +56,10 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 		if len(klines) > 22 {
 			recentKlines = klines[len(klines)-22:]
 		}
+		// Loại bỏ cây nến cuối cùng (chưa đóng) nếu có nhiều hơn 1 nến
+		if len(recentKlines) > 1 {
+			recentKlines = recentKlines[:len(recentKlines)-1]
+		}
 
 		loc := time.FixedZone("UTC+7", 7*60*60)
 
