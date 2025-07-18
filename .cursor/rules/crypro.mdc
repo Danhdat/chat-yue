@@ -1,9 +1,7 @@
 ---
-description:
-globs:
-alwaysApply: false
+alwaysApply: true
 ---
-GetLastNBySymbol lấy la một mảng có các volume sẽ lấy từ mới nhất đến cũ nhất , nên lưu ý tất cả những gì liên quan phải for theo mảng dữ liệu này . Ví dụ 
+GetLastNBySymbol lấy là một mảng có các volume sẽ lấy từ mới nhất đến cũ nhất , nên lưu ý tất cả những gì liên quan phải for theo mảng dữ liệu này . Ví dụ 
 records22[0] = nến 22 (mới nhất)
 records22[1] = nến 21
 records22[2] = nến 20
@@ -12,5 +10,6 @@ records22[4] = nến 18
 records22[5] = nến 17
 records22[6] = nến 16
 records22[7] = nến 15
+
 ...
 records22[21] = nến 1 (cũ nhất)

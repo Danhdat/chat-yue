@@ -164,27 +164,24 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			piercingResult := detectPiercingPattern(record20, record21, averageCandlestickBody)
 			confirmation2 := piercingResult.Confirmation
 			pattern2 := piercingResult.Pattern
+			hammerResult := detectHammer(records22)
+			confirmation4 := hammerResult.Confirmation
+			pattern4 := hammerResult.Pattern
 
-			message := fmt.Sprintf("💰*[ALERT]* Symbol: %s\n"+
-				"📅 Time: %s\n"+
-				"🚀Volume: %s\n"+
-				"🚀SMA21: %s\n"+
-				"🚀Price: %s\n"+
-				"🎯Strength: %s\n"+
-				"🔥Signal: %s\n"+
-				"🔥Pattern: %s %s %s\n"+
-				"🔥Confirmation: %s %s %s\n"+
-				"Check record21 %d , record20 %d",
+			message := fmt.Sprintf("💰*[ALERT]* %s\n"+
+				"🕒 *Time:* %s | 💵 *Price:* %s | 📈 *Volume:* %s (SMA21: %s)\n"+
+				"⚡️ *Strength:* %s | 🔥 *Signal:* %s\n"+
+				"✨ *Pattern:* %s\n %s\n %s\n %s\n"+
+				"✅ *Confirmation:* %s\n %s\n %s\n %s",
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
+				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
 				utils.FormatVolume(volumeAnalysis.VolumeSMA21),
-				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				volumeAnalysis.VolumeStrength,
 				volumeAnalysis.VolumeSignal,
-				pattern1, pattern2, pattern3,
-				confirmation1, confirmation2, confirmation3,
-				record21.ID, record20.ID,
+				pattern1, pattern2, pattern3, pattern4,
+				confirmation1, confirmation2, confirmation3, confirmation4,
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 		}
@@ -289,7 +286,8 @@ func detectPiercingPattern(record20, record21 models.AutoVolumeRecord, averageCa
 		record21.Candlestick() == 1 &&
 		record21.OpenPrice < record20.ClosePrice && // Nến 2 mở cửa dưới giá đóng cửa nến 1 (có thể mở dưới cả low)
 		record21.ClosePrice > record20.CandlestBodyMidpoint() && // Nến 2 đóng cửa trên điểm giữa thân nến 1
-		record21.ClosePrice < record20.OpenPrice { // Nến 2 đóng cửa dưới giá mở cửa nến 1 (không phải nhấn chìm) {
+		record21.ClosePrice < record20.OpenPrice &&
+		record21.OpenPrice < record20.LowPrice { // Nến 2 đóng cửa dưới giá mở cửa nến 1 (không phải nhấn chìm) {
 		return PatternDetectionResult{
 			Pattern:      "⚙️ Mô hình Piercing Pattern",
 			Confirmation: "✅ Tín hiệu đảo chiều tăng giá. Phe mua đã giành lại quyền kiểm soát sau một đợt giảm giá mạnh",
@@ -318,34 +316,90 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 			IsDetected:   true,
 		}
 	}
-	log.Println("resistance:", resistance)
+	log.Println("resistance:", resistance, "symbols", record21.Symbol)
 	return PatternDetectionResult{IsDetected: false}
 }
 
-// Tính resistance level (cao nhất của 5 nến trước nến hiện tại)
+// Tính resistance level (cao nhất của 16 nến trước nến hiện tại)
 func calculateResistance(records []models.AutoVolumeRecord) float64 {
 	// Kiểm tra điều kiện biên
 	if len(records) < 20 { // Cần ít nhất từ records[1] đến records[19]
 		return 0
 	}
-	// Xác định phạm vi nến 15-19 (tương ứng records[6] đến records[10])
+	// Xác định phạm vi nến 3-19 (tương ứng records[19] đến records[3])
 	// Vì:
 	// records[0] = nến 22 (mới nhất)
-	// CORRECTED RANGE: Nến 15-19 tương ứng với records22[7] đến records22[3]
-	startIdx := 7 // nến 15
-	endIdx := 3   // nến 19
+	// CORRECTED RANGE: Nến 3-19 tương ứng với records[19] đến records[3]
+	startIdx := 19 // nến 3
+	endIdx := 3    // nến 19
 	if startIdx >= len(records) || endIdx >= len(records) {
 		return 0
 	}
 
 	resistance := records[startIdx].HighPrice
-	for i := startIdx; i >= endIdx; i-- { // Lặp từ nến 15 đến 19
+	for i := startIdx; i >= endIdx; i-- { // Lặp từ nến 3 đến 19
 		if records[i].HighPrice > resistance {
 			resistance = records[i].HighPrice
 		}
 	}
 
 	return resistance
+}
+
+func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
+	isDowntrend := checkDowntrend(records, 5)
+	body := records[0].CandlestickBody()
+	totalLength := records[0].CandlestickLength()
+	upperShadow := records[0].CandlestickUpperShadow()
+	lowerShadow := records[0].CandlestickLowerShadow()
+
+	// Tiêu chuẩn nhận diện Hammer chuyên nghiệp
+	validBodySize := body <= totalLength*0.3      // Thân ≤ 30% tổng chiều dài
+	validLowerShadow := lowerShadow >= body*2     // Bóng dưới ≥ 2x thân
+	minimalUpperShadow := upperShadow <= body*0.5 // Bóng trên ≤ 0.5x thân
+	shadowRatio := lowerShadow >= upperShadow*3   // Bóng dưới dài gấp 3x bóng trên
+	validPosition := isDowntrend                  // Xuất hiện sau downtrend
+
+	if validBodySize && validLowerShadow && minimalUpperShadow && shadowRatio && validPosition {
+		// Phân loại Hammer
+		hammerType := "Bullish"
+		confidence := "Tín hiệu mạnh"
+		if records[0].ClosePrice < records[0].OpenPrice {
+			hammerType = "Bearish"
+			confidence = "Cần nến tăng xác nhận"
+		}
+
+		return PatternDetectionResult{
+			Pattern: fmt.Sprintf("⚙️ Mô hình Hammer (%s)", hammerType),
+			Confirmation: fmt.Sprintf("✅ %s - Thân: %.2f%%, Bóng dưới: %.2f%%, Bóng trên: %.2f%%",
+				confidence,
+				(body/totalLength)*100,
+				(lowerShadow/totalLength)*100,
+				(upperShadow/totalLength)*100),
+			IsDetected: true,
+		}
+	}
+	return PatternDetectionResult{IsDetected: false}
+}
+
+func checkDowntrend(records []models.AutoVolumeRecord, lookbackPeriod int) bool {
+	// Kiểm tra điều kiện biên
+	if len(records) < lookbackPeriod {
+		return false
+	}
+
+	// Tính số lượng nến giảm trong khoảng lookback
+	downCount := 0
+	startIdx := lookbackPeriod - 1 // Ví dụ: lookback=5 -> xét từ records[4] đến records[0]
+
+	for i := startIdx; i >= 0; i-- {
+		if records[i].Candlestick() == 0 { // Nến giảm
+			downCount++
+		}
+	}
+
+	// Xác định xu hướng giảm (ít nhất 60% nến là giảm)
+	return float64(downCount)/float64(lookbackPeriod) >= 0.6
 }
 
 type Scheduler2 struct {
