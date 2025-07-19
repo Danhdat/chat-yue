@@ -16,17 +16,19 @@ import (
 )
 
 type AutoVolumeService struct {
-	volumeRepo         *models.AutoVolumeRecordRepository
-	symbolRepo         *models.SymbolRepository
-	telegramBotService *TelegramBotService
+	volumeRepo          *models.AutoVolumeRecordRepository
+	symbolRepo          *models.SymbolRepository
+	notificationLogRepo *models.NotificationLogRepository
+	telegramBotService  *TelegramBotService
 }
 
 // Truyền TelegramBotService vào khi khởi tạo
 func NewAutoVolumeService(telegramBotService *TelegramBotService) *AutoVolumeService {
 	return &AutoVolumeService{
-		volumeRepo:         models.NewAutoVolumeRecordRepository(),
-		symbolRepo:         models.NewSymbolRepository(),
-		telegramBotService: telegramBotService,
+		volumeRepo:          models.NewAutoVolumeRecordRepository(),
+		symbolRepo:          models.NewSymbolRepository(),
+		notificationLogRepo: models.NewNotificationLogRepository(),
+		telegramBotService:  telegramBotService,
 	}
 }
 
@@ -170,13 +172,14 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 
 			patternString := utils.FormatElements(pattern1, pattern2, pattern3, pattern4)
 			confirmationString := utils.FormatElements(confirmation1, confirmation2, confirmation3, confirmation4)
-
+			count, _ := s.notificationLogRepo.CountBySymbolToday(symbol)
 			message := fmt.Sprintf("💰*[ALERT]* Symbol: *%s*\n"+
 				"📅 Time: %s\n"+
 				"🚀 Volume: *%s* (SMA21: %s)\n"+
 				"💵 Price: *%s*\n"+
 				"🎯 Strength: *%s*\n"+
 				"🔥 Signal: *%s*\n"+
+				"🔖 Daily Occurrences: %d\n"+
 				"✨ Pattern: %s\n"+
 				"📊 Confirmation: %s",
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
@@ -186,10 +189,20 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				volumeAnalysis.VolumeStrength,
 				volumeAnalysis.VolumeSignal,
+				count+1,
 				patternString,
 				confirmationString,
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
+
+			// Lưu log sau khi gửi
+			notificationLog := &models.NotificationLog{
+				Symbol:    symbol,
+				CreatedAt: time.Now(),
+			}
+			if err := s.notificationLogRepo.Create(notificationLog); err != nil {
+				log.Printf("Lỗi lưu log thông báo cho %s: %v", symbol, err)
+			}
 		}
 
 		// Đánh dấu symbol đã được xử lý

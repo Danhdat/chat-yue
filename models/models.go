@@ -124,3 +124,15 @@ func (r *AutoVolumeRecord) CandlestBodyMidpoint() float64 {
 		return r.ClosePrice + (r.OpenPrice-r.ClosePrice)/2
 	}
 }
+
+// NotificationLog lưu trữ lịch sử gửi tin nhắn
+type NotificationLog struct {
+	ID        uint      `gorm:"primaryKey"`
+	Symbol    string    `gorm:"not null;index"`
+	CreatedAt time.Time `gorm:"not null"`
+}
+
+// TableName định nghĩa tên bảng cho NotificationLog
+func (NotificationLog) TableName() string {
+	return "notification_logs"
+}

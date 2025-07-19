@@ -211,3 +211,29 @@ func (r *AutoVolumeRecordRepository) GetLastNBySymbol(symbol string, n int) ([]A
 	err := r.db.Where("symbol = ?", symbol).Order("open_time DESC").Limit(n).Find(&records).Error
 	return records, err
 }
+
+// NotificationLogRepository xử lý thao tác với bảng notification_logs
+type NotificationLogRepository struct {
+	db *gorm.DB
+}
+
+// NewNotificationLogRepository tạo instance mới
+func NewNotificationLogRepository() *NotificationLogRepository {
+	return &NotificationLogRepository{db: DB}
+}
+
+// Create lưu log thông báo mới
+func (r *NotificationLogRepository) Create(log *NotificationLog) error {
+	return r.db.Create(log).Error
+}
+
+// CountBySymbolToday đếm số lần gửi tin nhắn cho một symbol trong ngày hôm nay
+func (r *NotificationLogRepository) CountBySymbolToday(symbol string) (int64, error) {
+	var count int64
+	loc := time.FixedZone("UTC+7", 7*60*60)
+	today := time.Now().In(loc).Truncate(24 * time.Hour)
+	err := r.db.Model(&NotificationLog{}).
+		Where("symbol = ? AND created_at >= ?", symbol, today).
+		Count(&count).Error
+	return count, err
+}
