@@ -85,3 +85,17 @@ func FormatPriceN(value float64, n int) string {
 	}
 	return integerPart
 }
+
+// FormatElements format các phần tử thành chuỗi với dấu phẩy ngăn cách
+func FormatElements(elements ...string) string {
+	var validElements []string
+	for _, el := range elements {
+		if el != "" {
+			validElements = append(validElements, el)
+		}
+	}
+	if len(validElements) == 0 {
+		return "N/A" // Hoặc "None detected"
+	}
+	return strings.Join(validElements, ", ")
+}

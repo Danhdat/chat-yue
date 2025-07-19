@@ -168,20 +168,26 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			confirmation4 := hammerResult.Confirmation
 			pattern4 := hammerResult.Pattern
 
-			message := fmt.Sprintf("💰*[ALERT]* %s\n"+
-				"🕒 *Time:* %s | 💵 *Price:* %s | 📈 *Volume:* %s (SMA21: %s)\n"+
-				"⚡️ *Strength:* %s | 🔥 *Signal:* %s\n"+
-				"✨ *Pattern:* %s\n %s\n %s\n %s\n"+
-				"✅ *Confirmation:* %s\n %s\n %s\n %s",
+			patternString := utils.FormatElements(pattern1, pattern2, pattern3, pattern4)
+			confirmationString := utils.FormatElements(confirmation1, confirmation2, confirmation3, confirmation4)
+
+			message := fmt.Sprintf("💰*[ALERT]* Symbol: *%s*\n"+
+				"📅 Time: %s\n"+
+				"🚀 Volume: *%s* (SMA21: %s)\n"+
+				"💵 Price: *%s*\n"+
+				"🎯 Strength: *%s*\n"+
+				"🔥 Signal: *%s*\n"+
+				"✨ Pattern: %s\n"+
+				"📊 Confirmation: %s",
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
-				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
 				utils.FormatVolume(volumeAnalysis.VolumeSMA21),
+				utils.FormatPrice(decimal.NewFromFloat(latestRecord.ClosePrice)),
 				volumeAnalysis.VolumeStrength,
 				volumeAnalysis.VolumeSignal,
-				pattern1, pattern2, pattern3, pattern4,
-				confirmation1, confirmation2, confirmation3, confirmation4,
+				patternString,
+				confirmationString,
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 		}
@@ -273,7 +279,7 @@ func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectio
 		record21.ClosePrice < record20.OpenPrice {
 		return PatternDetectionResult{
 			Pattern:      "⚙️ Mô hình Bearish Engulfing",
-			Confirmation: "❎ Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua",
+			Confirmation: "🍎 Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua",
 			IsDetected:   true,
 		}
 	}
@@ -305,6 +311,7 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 	record21 := records[1]
 	// Tính resistance level (cao nhất của 5 nến trước nến hiện tại)
 	resistance := calculateResistance(records)
+	log.Println("resistance:", resistance, "symbols", record21.Symbol)
 	if record21.Candlestick() == 1 &&
 		record21.IsCandlestickBodyLong(averageCandlestickBody, 1.5) &&
 		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
@@ -316,7 +323,6 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 			IsDetected:   true,
 		}
 	}
-	log.Println("resistance:", resistance, "symbols", record21.Symbol)
 	return PatternDetectionResult{IsDetected: false}
 }
 
@@ -362,10 +368,10 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 
 	if validBodySize && validLowerShadow && minimalUpperShadow && shadowRatio && validPosition {
 		// Phân loại Hammer
-		hammerType := "Bullish"
+		hammerType := "🐂 Bullish"
 		confidence := "Tín hiệu mạnh"
 		if records[0].ClosePrice < records[0].OpenPrice {
-			hammerType = "Bearish"
+			hammerType = "🐻 Bearish"
 			confidence = "Cần nến tăng xác nhận"
 		}
 
