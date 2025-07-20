@@ -243,15 +243,13 @@ func (r *NotificationLogRepository) CountBySymbolToday(symbol string) (int64, er
 func (r *NotificationLogRepository) CountBySymbolThisWeek(symbol string) (int64, error) {
 	var count int64
 	loc := time.FixedZone("UTC+7", 7*60*60)
-	// Lấy thời điểm hiện tại và xác định start/end của tuần
 	now := time.Now().In(loc)
-	year, week := now.ISOWeek() // Tuân theo chuẩn ISO (thứ 2 là đầu tuần)
+	year, week := now.ISOWeek()
 
-	// Tính ngày đầu tiên (thứ 2) và cuối cùng (chủ nhật) của tuần
+	// Tính thứ 2 đầu tuần và chủ nhật cuối tuần
 	startOfWeek := firstDayOfISOWeek(year, week, loc)
-	endOfWeek := startOfWeek.AddDate(0, 0, 6) // +6 ngày = chủ nhật
+	endOfWeek := startOfWeek.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 
-	// Query đếm số lần gửi trong khoảng thời gian này
 	err := r.db.Model(&NotificationLog{}).
 		Where("symbol = ? AND created_at >= ? AND created_at <= ?",
 			symbol,
@@ -263,16 +261,15 @@ func (r *NotificationLogRepository) CountBySymbolThisWeek(symbol string) (int64,
 	return count, err
 }
 
-// Hàm phụ: Tính ngày đầu tiên (thứ 2) của tuần theo ISO 8601
 func firstDayOfISOWeek(year, week int, loc *time.Location) time.Time {
-	date := time.Date(year, 0, 0, 0, 0, 0, 0, loc) // Khởi tạo ngày "zero"
-	isoYear, isoWeek := date.ISOWeek()
-
-	// Điều chỉnh đến ngày đầu tuần (thứ 2)
-	for date.Weekday() != time.Monday || isoYear < year || isoWeek < week {
+	date := time.Date(year, time.January, 1, 0, 0, 0, 0, loc)
+	for date.Weekday() != time.Monday {
 		date = date.AddDate(0, 0, 1)
+	}
+	isoYear, isoWeek := date.ISOWeek()
+	for isoYear < year || isoWeek < week {
+		date = date.AddDate(0, 0, 7)
 		isoYear, isoWeek = date.ISOWeek()
 	}
-
 	return date
 }
