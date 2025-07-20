@@ -173,6 +173,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			patternString := utils.FormatElements(pattern1, pattern2, pattern3, pattern4)
 			confirmationString := utils.FormatElements(confirmation1, confirmation2, confirmation3, confirmation4)
 			count, _ := s.notificationLogRepo.CountBySymbolToday(symbol)
+			countofWeek, _ := s.notificationLogRepo.CountBySymbolThisWeek(symbol)
 			message := fmt.Sprintf("💰*[ALERT]* Symbol: *%s*\n"+
 				"📅 Time: %s\n"+
 				"🚀 Volume: *%s* (SMA21: %s)\n"+
@@ -181,7 +182,8 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"🔥 Signal: *%s*\n"+
 				"🔖 Daily Occurrences: %d\n"+
 				"✨ Pattern: %s\n"+
-				"📊 Confirmation: %s",
+				"📊 Confirmation: %s\n"+
+				"💎 Weekly Occurrences: %d\n",
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
 				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
@@ -192,6 +194,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				count+1,
 				patternString,
 				confirmationString,
+				countofWeek+1,
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 
