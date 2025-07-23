@@ -261,6 +261,19 @@ func (r *NotificationLogRepository) CountBySymbolThisWeek(symbol string) (int64,
 	return count, err
 }
 
+// Lấy toàn bộ NotificationLog trong tuần hiện tại
+func (r *NotificationLogRepository) GetLogsThisWeek() ([]NotificationLog, error) {
+	loc := time.FixedZone("UTC+7", 7*60*60)
+	now := time.Now().In(loc)
+	year, week := now.ISOWeek()
+	startOfWeek := firstDayOfISOWeek(year, week, loc)
+	endOfWeek := startOfWeek.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+
+	var logs []NotificationLog
+	err := r.db.Where("created_at >= ? AND created_at <= ?", startOfWeek, endOfWeek).Find(&logs).Error
+	return logs, err
+}
+
 func firstDayOfISOWeek(year, week int, loc *time.Location) time.Time {
 	date := time.Date(year, time.January, 1, 0, 0, 0, 0, loc)
 	for date.Weekday() != time.Monday {

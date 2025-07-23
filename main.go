@@ -55,6 +55,10 @@ func main() {
 	scheduler3 := services.NewScheduler3(autoVolumeService, botService.GetChannelID())
 	go scheduler3.Start()
 
+	reportService := services.NewReportService(botService)
+	scheduler4 := services.NewScheduler4(reportService, botService.GetChannelID())
+	go scheduler4.Start()
+
 	// Tạo channel để nhận tín hiệu dừng
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
@@ -72,6 +76,7 @@ func main() {
 	scheduler.Stop()
 	scheduler2.Stop()
 	scheduler3.Stop()
+	scheduler4.Stop()
 	time.Sleep(2 * time.Second)
 	log.Println("🛑 Bot đã dừng")
 

@@ -335,7 +335,7 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 		record21.ClosePrice > resistance { // Nến hiện tại phá vỡ
 		return PatternDetectionResult{
 			Pattern:      "⚙️ Mô hình Breakout",
-			Confirmation: "✅ Tín hiệu breakout: Giá đóng cửa vượt qua resistance (cao nhất 5 nến trước)",
+			Confirmation: "✅ Tín hiệu breakout: Giá đóng cửa vượt qua resistance",
 			IsDetected:   true,
 		}
 	}
