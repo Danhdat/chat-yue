@@ -174,6 +174,19 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			confirmationString := utils.FormatElements(confirmation1, confirmation2, confirmation3, confirmation4)
 			count, _ := s.notificationLogRepo.CountBySymbolToday(symbol)
 			countofWeek, _ := s.notificationLogRepo.CountBySymbolThisWeek(symbol)
+
+			// Ưu tiên: Breakout > Engulfing > Piercing > Hammer
+			direction := 0
+			if breakoutResult.IsDetected {
+				direction = breakoutResult.Direction
+			} else if engulfingResult.IsDetected {
+				direction = engulfingResult.Direction
+			} else if piercingResult.IsDetected {
+				direction = piercingResult.Direction
+			} else if hammerResult.IsDetected {
+				direction = hammerResult.Direction
+			}
+
 			message := fmt.Sprintf("💰*[ALERT]* Symbol: *%s*\n"+
 				"📅 Time: %s\n"+
 				"🚀 Volume: *%s* (SMA21: %s)\n"+
@@ -202,6 +215,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			notificationLog := &models.NotificationLog{
 				Symbol:    symbol,
 				CreatedAt: time.Now(),
+				Direction: direction,
 			}
 			if err := s.notificationLogRepo.Create(notificationLog); err != nil {
 				log.Printf("Lỗi lưu log thông báo cho %s: %v", symbol, err)
@@ -275,6 +289,7 @@ type PatternDetectionResult struct {
 	Pattern      string
 	Confirmation string
 	IsDetected   bool
+	Direction    int
 }
 
 func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectionResult {
@@ -287,6 +302,7 @@ func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectio
 			Pattern:      "⚙️ Mô hình Bullish Engulfing",
 			Confirmation: "✅ Đây là một tín hiệu đảo chiều tăng giá rất mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng giảm. Nó cho thấy phe mua đã hoàn toàn áp đảo phe bán",
 			IsDetected:   true,
+			Direction:    1,
 		}
 	} else if record20.Candlestick() == 1 &&
 		record21.Candlestick() == 0 &&
@@ -297,9 +313,10 @@ func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectio
 			Pattern:      "⚙️ Mô hình Bearish Engulfing",
 			Confirmation: "🍎 Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua",
 			IsDetected:   true,
+			Direction:    2,
 		}
 	}
-	return PatternDetectionResult{IsDetected: false}
+	return PatternDetectionResult{IsDetected: false, Direction: 0}
 }
 
 func detectPiercingPattern(record20, record21 models.AutoVolumeRecord, averageCandlestickBody float64) PatternDetectionResult {
@@ -314,9 +331,10 @@ func detectPiercingPattern(record20, record21 models.AutoVolumeRecord, averageCa
 			Pattern:      "⚙️ Mô hình Piercing Pattern",
 			Confirmation: "✅ Tín hiệu đảo chiều tăng giá. Phe mua đã giành lại quyền kiểm soát sau một đợt giảm giá mạnh",
 			IsDetected:   true,
+			Direction:    1,
 		}
 	}
-	return PatternDetectionResult{IsDetected: false}
+	return PatternDetectionResult{IsDetected: false, Direction: 0}
 }
 
 func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody float64) PatternDetectionResult {
@@ -337,9 +355,10 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 			Pattern:      "⚙️ Mô hình Breakout",
 			Confirmation: "✅ Tín hiệu breakout: Giá đóng cửa vượt qua resistance",
 			IsDetected:   true,
+			Direction:    1,
 		}
 	}
-	return PatternDetectionResult{IsDetected: false}
+	return PatternDetectionResult{IsDetected: false, Direction: 0}
 }
 
 // Tính resistance level (cao nhất của 16 nến trước nến hiện tại)
@@ -384,11 +403,15 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 
 	if validBodySize && validLowerShadow && minimalUpperShadow && shadowRatio && validPosition {
 		// Phân loại Hammer
+		var direction int
 		hammerType := "🐂 Bullish"
 		confidence := "Tín hiệu mạnh"
 		if records[0].ClosePrice < records[0].OpenPrice {
-			hammerType = "🐻 Bearish"
+			hammerType = "🐻 Bearish (Hanging Man)"
 			confidence = "Cần nến tăng xác nhận"
+			direction = 2
+		} else {
+			direction = 1
 		}
 
 		return PatternDetectionResult{
@@ -399,9 +422,10 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 				(lowerShadow/totalLength)*100,
 				(upperShadow/totalLength)*100),
 			IsDetected: true,
+			Direction:  direction,
 		}
 	}
-	return PatternDetectionResult{IsDetected: false}
+	return PatternDetectionResult{IsDetected: false, Direction: 0}
 }
 
 func checkDowntrend(records []models.AutoVolumeRecord, lookbackPeriod int) bool {

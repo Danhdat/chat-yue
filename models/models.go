@@ -130,6 +130,7 @@ type NotificationLog struct {
 	ID        uint      `gorm:"primaryKey"`
 	Symbol    string    `gorm:"not null;index"`
 	CreatedAt time.Time `gorm:"not null"`
+	Direction int       // "1:bullish", "2:bearish", "0:none"
 }
 
 // TableName định nghĩa tên bảng cho NotificationLog
