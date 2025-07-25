@@ -163,9 +163,9 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			engulfingResult := detectEngulfing(record20, record21)
 			confirmation1 := engulfingResult.Confirmation
 			pattern1 := engulfingResult.Pattern
-			piercingResult := detectPiercingPattern(record20, record21, averageCandlestickBody)
-			confirmation2 := piercingResult.Confirmation
-			pattern2 := piercingResult.Pattern
+			dojiResult := detectDojiSpecial(records22)
+			confirmation2 := dojiResult.Confirmation
+			pattern2 := dojiResult.Pattern
 			hammerResult := detectHammer(records22)
 			confirmation4 := hammerResult.Confirmation
 			pattern4 := hammerResult.Pattern
@@ -175,16 +175,16 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			count, _ := s.notificationLogRepo.CountBySymbolToday(symbol)
 			countofWeek, _ := s.notificationLogRepo.CountBySymbolThisWeek(symbol)
 
-			// Ưu tiên: Breakout > Engulfing > Piercing > Hammer
+			// Ưu tiên: Breakout > Engulfing > Hammer > Doji
 			direction := 0
 			if breakoutResult.IsDetected {
 				direction = breakoutResult.Direction
 			} else if engulfingResult.IsDetected {
 				direction = engulfingResult.Direction
-			} else if piercingResult.IsDetected {
-				direction = piercingResult.Direction
 			} else if hammerResult.IsDetected {
 				direction = hammerResult.Direction
+			} else if dojiResult.IsDetected {
+				direction = dojiResult.Direction
 			}
 
 			message := fmt.Sprintf("💰*[ALERT]* Symbol: *%s*\n"+
@@ -299,7 +299,7 @@ func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectio
 		record21.OpenPrice < record20.ClosePrice &&
 		record21.ClosePrice > record20.OpenPrice {
 		return PatternDetectionResult{
-			Pattern:      "⚙️ Mô hình Bullish Engulfing",
+			Pattern:      "⚙️ Mô hình 🐂 Bullish Engulfing",
 			Confirmation: "✅ Đây là một tín hiệu đảo chiều tăng giá rất mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng giảm. Nó cho thấy phe mua đã hoàn toàn áp đảo phe bán",
 			IsDetected:   true,
 			Direction:    1,
@@ -310,28 +310,10 @@ func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectio
 		record21.OpenPrice > record20.ClosePrice &&
 		record21.ClosePrice < record20.OpenPrice {
 		return PatternDetectionResult{
-			Pattern:      "⚙️ Mô hình Bearish Engulfing",
+			Pattern:      "⚙️ Mô hình 🐻 Bearish Engulfing",
 			Confirmation: "🍎 Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua",
 			IsDetected:   true,
 			Direction:    2,
-		}
-	}
-	return PatternDetectionResult{IsDetected: false, Direction: 0}
-}
-
-func detectPiercingPattern(record20, record21 models.AutoVolumeRecord, averageCandlestickBody float64) PatternDetectionResult {
-	if record20.Candlestick() == 0 &&
-		record20.IsCandlestickBodyLong(averageCandlestickBody, 1.5) &&
-		record21.Candlestick() == 1 &&
-		record21.OpenPrice < record20.ClosePrice && // Nến 2 mở cửa dưới giá đóng cửa nến 1 (có thể mở dưới cả low)
-		record21.ClosePrice > record20.CandlestBodyMidpoint() && // Nến 2 đóng cửa trên điểm giữa thân nến 1
-		record21.ClosePrice < record20.OpenPrice &&
-		record21.OpenPrice < record20.LowPrice { // Nến 2 đóng cửa dưới giá mở cửa nến 1 (không phải nhấn chìm) {
-		return PatternDetectionResult{
-			Pattern:      "⚙️ Mô hình Piercing Pattern",
-			Confirmation: "✅ Tín hiệu đảo chiều tăng giá. Phe mua đã giành lại quyền kiểm soát sau một đợt giảm giá mạnh",
-			IsDetected:   true,
-			Direction:    1,
 		}
 	}
 	return PatternDetectionResult{IsDetected: false, Direction: 0}
@@ -352,7 +334,7 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 		record20.ClosePrice < resistance && // Nến trước chưa phá vỡ
 		record21.ClosePrice > resistance { // Nến hiện tại phá vỡ
 		return PatternDetectionResult{
-			Pattern:      "⚙️ Mô hình Breakout",
+			Pattern:      "⚙️ Mô hình 🐂 Breakout",
 			Confirmation: "✅ Tín hiệu breakout: Giá đóng cửa vượt qua resistance",
 			IsDetected:   true,
 			Direction:    1,
@@ -446,6 +428,50 @@ func checkDowntrend(records []models.AutoVolumeRecord, lookbackPeriod int) bool 
 
 	// Xác định xu hướng giảm (ít nhất 60% nến là giảm)
 	return float64(downCount)/float64(lookbackPeriod) >= 0.6
+}
+
+func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult {
+	const (
+		bodyThreshold   = 0.1  // Thân nến ≤ 10% tổng độ dài
+		shadowThreshold = 0.05 // Bóng ngắn ≤ 5% tổng độ dài
+		minShadowRatio  = 2.0  // Bóng dài phải gấp ít nhất 2 lần thân
+	)
+
+	candle := records[0]
+	body := candle.CandlestickBody()
+	totalLength := candle.CandlestickLength()
+	upperShadow := candle.CandlestickUpperShadow()
+	lowerShadow := candle.CandlestickLowerShadow()
+
+	// Bỏ qua nếu không phải Doji (thân quá lớn)
+	if body > totalLength*bodyThreshold {
+		return PatternDetectionResult{IsDetected: false, Direction: 0}
+	}
+
+	// Kiểm tra Dragonfly Doji (bóng dưới dài, bóng trên rất ngắn)
+	if upperShadow <= totalLength*shadowThreshold &&
+		lowerShadow >= body*minShadowRatio {
+		return PatternDetectionResult{
+			Pattern:      "⚙️ Mô hình 🐂 Dragonfly Doji",
+			Confirmation: "✅ Tín hiệu tăng nếu xuất hiện sau downtrend",
+			IsDetected:   true,
+			Direction:    1,
+		}
+	}
+
+	// Kiểm tra Gravestone Doji (bóng trên dài, bóng dưới rất ngắn)
+	if lowerShadow <= totalLength*shadowThreshold &&
+		upperShadow >= body*minShadowRatio {
+		return PatternDetectionResult{
+			Pattern:      "⚙️ Mô hình 🐻 Gravestone Doji",
+			Confirmation: "🍎 Tín hiệu giảm nếu xuất hiện sau uptrend",
+			IsDetected:   true,
+			Direction:    2,
+		}
+	}
+
+	return PatternDetectionResult{IsDetected: false, Direction: 0}
+
 }
 
 type Scheduler2 struct {
