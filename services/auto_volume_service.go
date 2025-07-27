@@ -557,6 +557,17 @@ func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult
 	upperShadow := candle.CandlestickUpperShadow()
 	lowerShadow := candle.CandlestickLowerShadow()
 
+	// KIỂM TRA ĐIỀU KIỆN ĐỂ TRÁNH NaN
+	// Nếu totalLength = 0 (HighPrice = LowPrice), không thể phân tích
+	if totalLength <= 0 {
+		return PatternDetectionResult{IsDetected: false, Direction: 0}
+	}
+
+	// Nếu body = 0, không thể tính tỷ lệ
+	if body <= 0 {
+		return PatternDetectionResult{IsDetected: false, Direction: 0}
+	}
+
 	// Bỏ qua nếu không phải Doji (thân quá lớn)
 	if body > totalLength*bodyThreshold {
 		return PatternDetectionResult{IsDetected: false, Direction: 0}
