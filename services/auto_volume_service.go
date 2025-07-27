@@ -235,18 +235,18 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 
 		volumeAnalysis := taService.analyzeVolumeFromFloat64(volumes)
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
-			// Lấy bản ghi MỚI NHẤT (records22[0])
+			// Lấy bản ghi MỚI NHẤT (records22[0]) - nến đang hình thành
 			latestRecord := records22[0]
-			// lấy bản ghi cây nến thứ 21
+			// lấy bản ghi cây nến thứ 21 (records22[1]) - nến đã đóng gần nhất
 			record21 := records22[1]
-			// lấy bản ghi cây nến thứ 20
+			// lấy bản ghi cây nến thứ 20 (records22[2]) - nến đã đóng trước đó
 			record20 := records22[2]
 
 			// Lấy time hiện tại
 			currentTime := time.Now().In(loc)
 			formattedTime := currentTime.Format("2006-01-02 15:04:05")
 
-			// Phân tích mô hình
+			// Phân tích mô hình trên nến ĐÃ ĐÓNG (records22[1] và records22[2])
 			breakoutResult := detectBreakout(records22, averageCandlestickBody)
 			confirmation3 := breakoutResult.Confirmation
 			pattern3 := breakoutResult.Pattern
@@ -392,6 +392,10 @@ type PatternDetectionResult struct {
 }
 
 func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectionResult {
+	// QUAN TRỌNG: record20 và record21 giờ đây là nến ĐÃ ĐÓNG
+	// record20 = records[2] = nến đã đóng trước đó
+	// record21 = records[1] = nến đã đóng gần nhất
+
 	if record20.Candlestick() == 0 &&
 		record21.Candlestick() == 1 &&
 		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
@@ -422,11 +426,17 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 	if len(records) < 8 { // Cần ít nhất 8 nến để có nến 15-19
 		return PatternDetectionResult{IsDetected: false}
 	}
-	record20 := records[2]
-	record21 := records[1]
+
+	// QUAN TRỌNG: Phân tích Breakout trên nến ĐÃ ĐÓNG
+	// records[1] = nến đã đóng gần nhất (thay vì records[1] cũ)
+	// records[2] = nến đã đóng trước đó (thay vì records[2] cũ)
+	record20 := records[2] // Nến đã đóng trước đó
+	record21 := records[1] // Nến đã đóng gần nhất
+
 	// Tính resistance level (cao nhất của 5 nến trước nến hiện tại)
 	resistance := calculateResistance(records)
 	log.Println("resistance:", resistance, "symbols", record21.Symbol)
+
 	if record21.Candlestick() == 1 &&
 		record21.IsCandlestickBodyLong(averageCandlestickBody, 1.5) &&
 		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
@@ -469,11 +479,19 @@ func calculateResistance(records []models.AutoVolumeRecord) float64 {
 }
 
 func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
-	isDowntrend := checkDowntrend(records, 5)
-	body := records[0].CandlestickBody()
-	totalLength := records[0].CandlestickLength()
-	upperShadow := records[0].CandlestickUpperShadow()
-	lowerShadow := records[0].CandlestickLowerShadow()
+	// Kiểm tra điều kiện biên
+	if len(records) < 7 {
+		return PatternDetectionResult{IsDetected: false, Direction: 0}
+	}
+
+	// QUAN TRỌNG: Phân tích Hammer trên nến ĐÃ ĐÓNG (records[1]) thay vì nến đang hình thành (records[0])
+	// records[0] = nến đang hình thành (chưa đóng) - KHÔNG nên phân tích
+	// records[1] = nến đã đóng gần nhất - PHÂN TÍCH Ở ĐÂY
+	isDowntrend := checkDowntrendFromIndex(records, 2, 6)
+	body := records[1].CandlestickBody()
+	totalLength := records[1].CandlestickLength()
+	upperShadow := records[1].CandlestickUpperShadow()
+	lowerShadow := records[1].CandlestickLowerShadow()
 
 	// Tiêu chuẩn nhận diện Hammer chuyên nghiệp
 	validBodySize := body <= totalLength*0.3      // Thân ≤ 30% tổng chiều dài
@@ -487,7 +505,7 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 		var direction int
 		hammerType := "🐂 Bullish"
 		confidence := "Tín hiệu mạnh"
-		if records[0].ClosePrice < records[0].OpenPrice {
+		if records[1].ClosePrice < records[1].OpenPrice {
 			hammerType = "🐻 Bearish (Hanging Man)"
 			confidence = "Cần nến tăng xác nhận"
 			direction = 2
@@ -509,26 +527,6 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 	return PatternDetectionResult{IsDetected: false, Direction: 0}
 }
 
-func checkDowntrend(records []models.AutoVolumeRecord, lookbackPeriod int) bool {
-	// Kiểm tra điều kiện biên
-	if len(records) < lookbackPeriod {
-		return false
-	}
-
-	// Tính số lượng nến giảm trong khoảng lookback
-	downCount := 0
-	startIdx := lookbackPeriod - 1 // Ví dụ: lookback=5 -> xét từ records[4] đến records[0]
-
-	for i := startIdx; i >= 0; i-- {
-		if records[i].Candlestick() == 0 { // Nến giảm
-			downCount++
-		}
-	}
-
-	// Xác định xu hướng giảm (ít nhất 60% nến là giảm)
-	return float64(downCount)/float64(lookbackPeriod) >= 0.6
-}
-
 func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult {
 	const (
 		bodyThreshold   = 0.1  // Thân nến ≤ 10% tổng độ dài
@@ -536,7 +534,15 @@ func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult
 		minShadowRatio  = 2.0  // Bóng dài phải gấp ít nhất 2 lần thân
 	)
 
-	candle := records[0]
+	// Kiểm tra điều kiện biên - cần ít nhất 7 nến để phân tích
+	if len(records) < 7 {
+		return PatternDetectionResult{IsDetected: false, Direction: 0}
+	}
+
+	// QUAN TRỌNG: Phân tích Doji trên nến ĐÃ ĐÓNG (records[1]) thay vì nến đang hình thành (records[0])
+	// records[0] = nến đang hình thành (chưa đóng) - KHÔNG nên phân tích
+	// records[1] = nến đã đóng gần nhất - PHÂN TÍCH Ở ĐÂY
+	candle := records[1] // Nến đã đóng gần nhất
 	body := candle.CandlestickBody()
 	totalLength := candle.CandlestickLength()
 	upperShadow := candle.CandlestickUpperShadow()
@@ -547,30 +553,113 @@ func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult
 		return PatternDetectionResult{IsDetected: false, Direction: 0}
 	}
 
+	// Kiểm tra xu hướng trước đó (5 nến trước records[1])
+	// Sử dụng records[2] đến records[6] để kiểm tra xu hướng
+	isDowntrend := checkDowntrendFromIndex(records, 2, 6)
+	isUptrend := checkUptrendFromIndex(records, 2, 6)
+
 	// Kiểm tra Dragonfly Doji (bóng dưới dài, bóng trên rất ngắn)
 	if upperShadow <= totalLength*shadowThreshold &&
+		lowerShadow >= totalLength*0.3 && // Bóng dưới ≥ 30% tổng độ dài
 		lowerShadow >= body*minShadowRatio {
-		return PatternDetectionResult{
-			Pattern:      "⚙️ Mô hình 🐂 Dragonfly Doji",
-			Confirmation: "✅ Tín hiệu tăng nếu xuất hiện sau downtrend",
-			IsDetected:   true,
-			Direction:    1,
+
+		// Dragonfly Doji chỉ có ý nghĩa sau downtrend
+		if isDowntrend {
+			return PatternDetectionResult{
+				Pattern:      "⚙️ Mô hình 🐂 Dragonfly Doji",
+				Confirmation: "✅ Tín hiệu tăng mạnh sau downtrend - Phe mua đang tích lũy",
+				IsDetected:   true,
+				Direction:    1,
+			}
+		} else {
+			return PatternDetectionResult{
+				Pattern:      "⚙️ Mô hình 🐂 Dragonfly Doji (Yếu)",
+				Confirmation: "⚠️ Dragonfly Doji xuất hiện không sau downtrend - Tín hiệu yếu hơn",
+				IsDetected:   true,
+				Direction:    1,
+			}
 		}
 	}
 
 	// Kiểm tra Gravestone Doji (bóng trên dài, bóng dưới rất ngắn)
 	if lowerShadow <= totalLength*shadowThreshold &&
+		upperShadow >= totalLength*0.3 && // Bóng trên ≥ 30% tổng độ dài
 		upperShadow >= body*minShadowRatio {
+
+		// Gravestone Doji chỉ có ý nghĩa sau uptrend
+		if isUptrend {
+			return PatternDetectionResult{
+				Pattern:      "⚙️ Mô hình 🐻 Gravestone Doji",
+				Confirmation: "🍎 Tín hiệu giảm mạnh sau uptrend - Phe bán đang áp đảo",
+				IsDetected:   true,
+				Direction:    2,
+			}
+		} else {
+			return PatternDetectionResult{
+				Pattern:      "⚙️ Mô hình 🐻 Gravestone Doji (Yếu)",
+				Confirmation: "⚠️ Gravestone Doji xuất hiện không sau uptrend - Tín hiệu yếu hơn",
+				IsDetected:   true,
+				Direction:    2,
+			}
+		}
+	}
+
+	// Kiểm tra Four Price Doji (thân rất nhỏ, bóng trên và dưới đều ngắn)
+	if body <= totalLength*0.05 && // Thân ≤ 5% tổng độ dài
+		upperShadow <= totalLength*0.1 && // Bóng trên ≤ 10%
+		lowerShadow <= totalLength*0.1 { // Bóng dưới ≤ 10%
+
 		return PatternDetectionResult{
-			Pattern:      "⚙️ Mô hình 🐻 Gravestone Doji",
-			Confirmation: "🍎 Tín hiệu giảm nếu xuất hiện sau uptrend",
+			Pattern:      "⚙️ Mô hình 🔄 Four Price Doji",
+			Confirmation: "🔄 Tín hiệu indecision - Thị trường đang cân bằng, chờ breakout",
 			IsDetected:   true,
-			Direction:    2,
+			Direction:    0, // Không xác định hướng
 		}
 	}
 
 	return PatternDetectionResult{IsDetected: false, Direction: 0}
+}
 
+// Hàm kiểm tra downtrend từ index cụ thể
+func checkDowntrendFromIndex(records []models.AutoVolumeRecord, startIdx, endIdx int) bool {
+	// Kiểm tra điều kiện biên
+	if startIdx >= len(records) || endIdx >= len(records) || startIdx > endIdx {
+		return false
+	}
+
+	// Tính số lượng nến giảm trong khoảng từ startIdx đến endIdx
+	downCount := 0
+	totalCandles := endIdx - startIdx + 1
+
+	for i := startIdx; i <= endIdx; i++ {
+		if records[i].Candlestick() == 0 { // Nến giảm
+			downCount++
+		}
+	}
+
+	// Xác định xu hướng giảm (ít nhất 60% nến là giảm)
+	return float64(downCount)/float64(totalCandles) >= 0.6
+}
+
+// Hàm kiểm tra uptrend từ index cụ thể
+func checkUptrendFromIndex(records []models.AutoVolumeRecord, startIdx, endIdx int) bool {
+	// Kiểm tra điều kiện biên
+	if startIdx >= len(records) || endIdx >= len(records) || startIdx > endIdx {
+		return false
+	}
+
+	// Tính số lượng nến tăng trong khoảng từ startIdx đến endIdx
+	upCount := 0
+	totalCandles := endIdx - startIdx + 1
+
+	for i := startIdx; i <= endIdx; i++ {
+		if records[i].Candlestick() == 1 { // Nến tăng
+			upCount++
+		}
+	}
+
+	// Xác định xu hướng tăng (ít nhất 60% nến là tăng)
+	return float64(upCount)/float64(totalCandles) >= 0.6
 }
 
 type Scheduler2 struct {
@@ -648,7 +737,7 @@ func (s *Scheduler3) Start() {
 	// Tạo timer với thời gian đến lần chạy tiếp theo (9:02:00 nếu now là 8:30:00)
 	timer := time.NewTimer(time.Until(nextSchedule()))
 	defer timer.Stop()
-	go s.Run()
+
 	for {
 		select {
 		case <-timer.C:
