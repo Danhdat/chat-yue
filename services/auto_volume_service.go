@@ -112,11 +112,14 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 
 		if isAlphaSymbol(originalSymbol) {
 			symbolType = 1
-			if actualSymbol, err := s.alphaRepo.GetNameByAlphaSymbol(originalSymbol); err == nil {
-				resolvedSymbol = actualSymbol
-			} else {
-				fmt.Printf("Lỗi lấy tên symbol cho %s: %v\n", originalSymbol, err)
+			actualSymbol, err := s.alphaRepo.GetNameByAlphaSymbol(originalSymbol)
+			if err != nil {
+				// RẤT QUAN TRỌNG: Nếu không thể resolve alpha symbol, ta BỎ QUA symbol này.
+				// Điều này đảm bảo chúng ta không lưu dữ liệu với một symbol không chính xác hoặc không xác định.
+				fmt.Printf("Lỗi lấy tên symbol cho alpha symbol '%s': %v. Bỏ qua symbol này.\n", originalSymbol, err)
+				continue
 			}
+			resolvedSymbol = actualSymbol // Gán lại resolvedSymbol nếu tìm thấy
 		}
 
 		// Lấy dữ liệu kline (dùng originalSymbol cho API call)
