@@ -107,18 +107,22 @@ func (r *SymbolRepository) Create(symbol *Symbol) error {
 	return r.db.Create(symbol).Error
 }
 
-func (r *SymbolRepository) UpdateLastUpdateTime() error {
+type CommonRepository struct {
+	db *gorm.DB
+}
+
+func NewCommonRepository() *CommonRepository {
+	return &CommonRepository{db: DB}
+}
+func (r *CommonRepository) UpdateLastUpdateTime(tableName string) error {
 	var dataUpdate DataUpdate
-	// tìm hoặc tạo record
-	result := r.db.Model(&DataUpdate{}).Where("table_name = ?", "symbols").First(&dataUpdate)
+	result := r.db.Model(&DataUpdate{}).Where("table_name = ?", tableName).First(&dataUpdate)
 	if result.Error != nil {
-		dataUpdate := DataUpdate{
-			TableName:  "symbols",
+		return r.db.Create(&DataUpdate{
+			TableName:  tableName,
 			LastUpdate: time.Now(),
-		}
-		return r.db.Create(&dataUpdate).Error
+		}).Error
 	}
-	// cập nhật thời gian
 	dataUpdate.LastUpdate = time.Now()
 	return r.db.Save(&dataUpdate).Error
 }
@@ -157,9 +161,9 @@ func (r *SymbolRepository) SaveToDatabase(symbols []Symbol) error {
 }
 
 const updateInterval = 15 * 24 * time.Hour // 15 ngày
-func (r *SymbolRepository) ShouldUpdate() bool {
+func (r *CommonRepository) ShouldUpdate(tableName string) bool {
 	var dataUpdate DataUpdate
-	err := r.db.Model(&DataUpdate{}).Where("table_name = ?", "symbols").First(&dataUpdate).Error
+	err := r.db.Model(&DataUpdate{}).Where("table_name = ?", tableName).First(&dataUpdate).Error
 	if err != nil {
 		return true
 	}
@@ -285,4 +289,42 @@ func firstDayOfISOWeek(year, week int, loc *time.Location) time.Time {
 		isoYear, isoWeek = date.ISOWeek()
 	}
 	return date
+}
+
+// ALPHA BINANCE
+type AlphaSymbolRepository struct {
+	db *gorm.DB
+}
+
+func NewAlphaSymbolRepository() *AlphaSymbolRepository {
+	return &AlphaSymbolRepository{db: DB}
+}
+
+func (r *AlphaSymbolRepository) SaveToDatabaseAlpha(symbols []AlphaSymbol) error {
+	// Xoá dữ liệu cũ
+	if err := r.db.Unscoped().Where("1 = 1").Delete(&AlphaSymbol{}).Error; err != nil {
+		return err
+	}
+	// Lưu dữ liệu mới
+	if len(symbols) > 0 {
+		if err := r.db.Create(&symbols).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *AlphaSymbolRepository) GetAllAlphaSymbols() ([]string, error) {
+	var symbols []AlphaSymbol
+	err := r.db.Find(&symbols).Error
+	if err != nil {
+		return nil, err
+	}
+	var result []string
+	for _, s := range symbols {
+		if !s.CexOffDisplay {
+			result = append(result, s.AlphaID)
+		}
+	}
+	return result, nil
 }

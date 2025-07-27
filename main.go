@@ -49,6 +49,9 @@ func main() {
 	scheduler := services.NewScheduler(fetchService)
 	go scheduler.Start()
 
+	schedulerAlpha := services.NewSchedulerAlpha(fetchService)
+	go schedulerAlpha.Start()
+
 	autoVolumeService := services.NewAutoVolumeService(botService)
 	scheduler2 := services.NewScheduler2(autoVolumeService)
 	go scheduler2.Start()
@@ -74,6 +77,7 @@ func main() {
 	log.Println("🛑 Đang dừng bot...")
 	// Gọi Stop cho các service nếu có
 	scheduler.Stop()
+	schedulerAlpha.Stop()
 	scheduler2.Stop()
 	scheduler3.Stop()
 	scheduler4.Stop()

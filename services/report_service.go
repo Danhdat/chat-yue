@@ -117,7 +117,6 @@ func (s *Scheduler4) Start() {
 	// Tạo timer với thời gian đến lần chạy tiếp theo
 	timer := time.NewTimer(time.Until(nextSchedule()))
 	defer timer.Stop()
-	go s.Run()
 	for {
 		select {
 		case <-timer.C:

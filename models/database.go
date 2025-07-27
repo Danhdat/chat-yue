@@ -77,6 +77,7 @@ func AutoMigrate() error {
 		&DataUpdate{},
 		&AutoVolumeRecord{},
 		&NotificationLog{},
+		&AlphaSymbol{},
 	)
 
 	if err != nil {
