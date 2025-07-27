@@ -632,7 +632,6 @@ func NewScheduler3(autoVolumeService *AutoVolumeService, channelID string) *Sche
 
 func (s *Scheduler3) Start() {
 	// Hàm helper để tính thời gian đến giờ:02 phút tiếp theo
-	go s.Run()
 	nextSchedule := func() time.Time {
 		now := time.Now()
 		// Cắt lẻ đến giờ, sau đó thêm 1 giờ + 2 phút (ví dụ: 8:30 → 9:02:00)

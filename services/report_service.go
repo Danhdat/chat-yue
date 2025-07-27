@@ -32,37 +32,89 @@ func (s *ReportService) ReportTop10SymbolsThisWeek(channelID string) error {
 		return err
 	}
 
-	symbolCount := make(map[string]int)
+	// Tạo struct để lưu thông tin chi tiết
+	type symbolInfo struct {
+		Count   int
+		Bullish int
+		Bearish int
+	}
+
+	regularSymbols := make(map[string]*symbolInfo)
+	alphaSymbols := make(map[string]*symbolInfo)
+
+	// Đếm số lần và phân loại direction
 	for _, log := range logs {
-		symbolCount[log.Symbol]++
+		var m map[string]*symbolInfo
+		if log.Type == 1 {
+			m = alphaSymbols
+		} else {
+			m = regularSymbols
+		}
+
+		if _, exists := m[log.Symbol]; !exists {
+			m[log.Symbol] = &symbolInfo{}
+		}
+
+		m[log.Symbol].Count++
+		switch log.Direction {
+		case 1:
+			m[log.Symbol].Bullish++
+		case 2:
+			m[log.Symbol].Bearish++
+		}
 	}
 
-	type kv struct {
-		Key   string
-		Value int
+	// Hàm sắp xếp
+	getTop10 := func(m map[string]*symbolInfo) []struct {
+		Symbol string
+		Info   *symbolInfo
+	} {
+		var sorted []struct {
+			Symbol string
+			Info   *symbolInfo
+		}
+		for k, v := range m {
+			sorted = append(sorted, struct {
+				Symbol string
+				Info   *symbolInfo
+			}{k, v})
+		}
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Info.Count > sorted[j].Info.Count
+		})
+		if len(sorted) > 10 {
+			return sorted[:10]
+		}
+		return sorted
 	}
-	var sorted []kv
-	for k, v := range symbolCount {
-		sorted = append(sorted, kv{k, v})
-	}
-	// Sắp xếp giảm dần theo số lần xuất hiện
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Value > sorted[j].Value
-	})
 
-	top := 10
-	if len(sorted) < 10 {
-		top = len(sorted)
-	}
-
+	// Tạo báo cáo
 	var builder strings.Builder
-	builder.WriteString("📊 *Top 10 Coin xuất hiện nhiều nhất trong tuần này*\n")
-	for i := 0; i < top; i++ {
-		builder.WriteString(fmt.Sprintf("%d. %s: %d lần\n", i+1, sorted[i].Key, sorted[i].Value))
+	builder.WriteString("📊 *Top 10 Coin tuần này*\n\n")
+
+	// Top Regular
+	builder.WriteString("🔹 *Top 10 thường*\n")
+	for i, item := range getTop10(regularSymbols) {
+		builder.WriteString(fmt.Sprintf("%d. %s: %d lần (↑%d ↓%d)\n",
+			i+1,
+			item.Symbol,
+			item.Info.Count,
+			item.Info.Bullish,
+			item.Info.Bearish))
 	}
 
-	message := builder.String()
-	s.telegramBotService.SendTelegramToChannel(channelID, message)
+	// Top Alpha
+	builder.WriteString("\n🔸 *Top 10 Alpha*\n")
+	for i, item := range getTop10(alphaSymbols) {
+		builder.WriteString(fmt.Sprintf("%d. %s: %d lần (↑%d ↓%d)\n",
+			i+1,
+			item.Symbol,
+			item.Info.Count,
+			item.Info.Bullish,
+			item.Info.Bearish))
+	}
+
+	s.telegramBotService.SendTelegramToChannel(channelID, builder.String())
 	return nil
 }
 
@@ -99,24 +151,34 @@ func (s *Scheduler4) Start() {
 		now := time.Now().In(loc) // Chuyển thời gian hiện tại sang UTC+7
 
 		// Tạo thời điểm 10:30 và 18:30 hôm nay theo UTC+7
+		today6_30 := time.Date(now.Year(), now.Month(), now.Day(), 6, 30, 0, 0, loc)
 		today10_30 := time.Date(now.Year(), now.Month(), now.Day(), 10, 30, 0, 0, loc)
+		today15_30 := time.Date(now.Year(), now.Month(), now.Day(), 15, 30, 0, 0, loc)
 		today18_30 := time.Date(now.Year(), now.Month(), now.Day(), 18, 30, 0, 0, loc)
+		today21_30 := time.Date(now.Year(), now.Month(), now.Day(), 21, 30, 0, 0, loc)
 
 		// Xác định thời điểm chạy tiếp theo
 		switch {
+		case now.Before(today6_30):
+			return today6_30
 		case now.Before(today10_30):
 			return today10_30
+		case now.Before(today15_30):
+			return today15_30
 		case now.Before(today18_30):
 			return today18_30
+		case now.Before(today21_30):
+			return today21_30
 		default:
-			// Nếu đã qua cả 2 mốc, trả về 10:30 ngày hôm sau
-			return today10_30.Add(24 * time.Hour)
+			// Nếu đã qua cả 5 mốc, trả về 6:30 ngày hôm sau
+			return today6_30.Add(24 * time.Hour)
 		}
 	}
 
 	// Tạo timer với thời gian đến lần chạy tiếp theo
 	timer := time.NewTimer(time.Until(nextSchedule()))
 	defer timer.Stop()
+	go s.Run()
 	for {
 		select {
 		case <-timer.C:
