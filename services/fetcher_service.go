@@ -94,7 +94,7 @@ func NewScheduler(fetchService *FetcherService) *Scheduler {
 func (s *Scheduler) Start() {
 	log.Println("Scheduler started")
 	// Chạy cập nhật đầu tiên
-	go s.runUpdate()
+
 	// Chạy cập nhật định kỳ mỗi 15 ngày
 	ticker := time.NewTicker(15 * 24 * time.Hour)
 	defer ticker.Stop()

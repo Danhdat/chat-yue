@@ -19,6 +19,7 @@ type AutoVolumeService struct {
 	volumeRepo          *models.AutoVolumeRecordRepository
 	symbolRepo          *models.SymbolRepository
 	notificationLogRepo *models.NotificationLogRepository
+	alphaRepo           *models.AlphaSymbolRepository
 	telegramBotService  *TelegramBotService
 }
 
@@ -28,8 +29,67 @@ func NewAutoVolumeService(telegramBotService *TelegramBotService) *AutoVolumeSer
 		volumeRepo:          models.NewAutoVolumeRecordRepository(),
 		symbolRepo:          models.NewSymbolRepository(),
 		notificationLogRepo: models.NewNotificationLogRepository(),
+		alphaRepo:           models.NewAlphaSymbolRepository(),
 		telegramBotService:  telegramBotService,
 	}
+}
+
+// Hàm kiểm tra alpha symbol
+func isAlphaSymbol(symbol string) bool {
+	return strings.HasPrefix(symbol, "ALPHA_")
+}
+
+func (s *AutoVolumeService) fetchRegularKlines(symbol string) ([][]interface{}, error) {
+	url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=1h&limit=23", symbol)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var klines [][]interface{}
+	if err := json.Unmarshal(body, &klines); err != nil {
+		return nil, fmt.Errorf("lỗi parse regular klines: %w", err)
+	}
+
+	return klines, nil
+}
+
+func (s *AutoVolumeService) fetchAlphaKlines(symbol string) ([][]interface{}, error) {
+	url := fmt.Sprintf("https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?interval=1h&limit=23&symbol=%s", symbol)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cấu trúc response mới của API Alpha
+	var alphaResponse struct {
+		Code    string          `json:"code"`
+		Message interface{}     `json:"message"`
+		Data    [][]interface{} `json:"data"`
+		Success bool            `json:"success"`
+	}
+
+	if err := json.Unmarshal(body, &alphaResponse); err != nil {
+		return nil, fmt.Errorf("lỗi parse alpha klines: %w", err)
+	}
+
+	if !alphaResponse.Success || alphaResponse.Code != "000000" {
+		return nil, fmt.Errorf("API Alpha trả về lỗi: %v", alphaResponse.Message)
+	}
+
+	return alphaResponse.Data, nil
 }
 
 func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
@@ -37,20 +97,27 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 	if err != nil {
 		return err
 	}
-	for _, symbol := range symbols {
+
+	alphaSymbols, err := s.alphaRepo.GetAllAlphaSymbols()
+	if err != nil {
+		return fmt.Errorf("lỗi lấy alpha symbols: %w", err)
+	}
+
+	allSymbols := append(symbols, alphaSymbols...)
+
+	for _, symbol := range allSymbols {
 		// Lấy dữ liệu kline
-		url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=1h&limit=23", symbol)
-		resp, err := http.Get(url)
+		var klines [][]interface{}
+		var err error
+
+		if isAlphaSymbol(symbol) {
+			klines, err = s.fetchAlphaKlines(symbol + "USDT")
+		} else {
+			klines, err = s.fetchRegularKlines(symbol)
+		}
+
 		if err != nil {
 			fmt.Printf("Lỗi lấy dữ liệu %s: %v\n", symbol, err)
-			continue
-		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		var klines [][]interface{}
-		if err := json.Unmarshal(body, &klines); err != nil || len(klines) == 0 {
-			fmt.Printf("Lỗi parse dữ liệu %s: %v\n", symbol, err)
 			continue
 		}
 		// Loại bỏ cây nến cuối cùng (chưa đóng) nếu có nhiều hơn 1 nến
@@ -69,7 +136,7 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 		var records []models.AutoVolumeRecord
 
 		for _, k := range recentKlines {
-			openTime := k[0].(float64)
+			openTime := parseKlineValue(k[0])
 			quoteAssetVolumeStr := k[7].(string)
 			quoteAssetVolume, _ := strconv.ParseFloat(quoteAssetVolumeStr, 64)
 			openPriceStr := k[1].(string)
@@ -80,6 +147,17 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 			highPrice, _ := strconv.ParseFloat(highPriceStr, 64)
 			lowPriceStr := k[3].(string)
 			lowPrice, _ := strconv.ParseFloat(lowPriceStr, 64)
+			symbolType := 0
+			if strings.Contains(symbol, "ALPHA_") {
+				symbolType = 1
+				actualSymbol, err := s.alphaRepo.GetNameByAlphaSymbol(symbol)
+				if err != nil {
+					fmt.Printf("Lỗi lấy tên symbol cho %s: %v\n", symbol, err)
+					// Có thể xử lý tiếp tục dùng symbol gốc hoặc bỏ qua
+				} else {
+					symbol = actualSymbol // Chỉ gán khi không có lỗi
+				}
+			}
 
 			record := models.AutoVolumeRecord{
 				Symbol:           symbol,
@@ -91,6 +169,7 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 				LowPrice:         lowPrice,
 				CreatedAt:        time.Now().In(loc),
 				UpdatedAt:        time.Now().In(loc),
+				Type:             symbolType,
 			}
 			records = append(records, record)
 		}
@@ -108,10 +187,16 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 
 func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 	// Lấy tất cả symbols thay vì tất cả records
-	symbols, err := s.symbolRepo.GetAllSymbols()
+	reSymbols, err := s.symbolRepo.GetAllSymbols()
 	if err != nil {
 		return err
 	}
+	alphaSymbols, err := s.alphaRepo.GetAllAlphaSymbols()
+	if err != nil {
+		return err
+	}
+	symbols := append(reSymbols, alphaSymbols...)
+
 	log.Println("Analyzing volumes for ", len(symbols), "symbols")
 	taService := NewTechnicalAnalysisService()
 
@@ -186,8 +271,11 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			} else if dojiResult.IsDetected {
 				direction = dojiResult.Direction
 			}
-
-			message := fmt.Sprintf("💰*[ALERT]* Symbol: *%s*\n"+
+			alertHeader := "*[CEX]*"
+			if latestRecord.Type == 1 {
+				alertHeader = "*[ALPHA BINANCE]* 🚨" // Thêm icon cảnh báo đặc biệt
+			}
+			message := fmt.Sprintf("💰%s *[ALERT]* Symbol: *%s*\n"+
 				"📅 Time: %s\n"+
 				"🚀 Volume: *%s* (SMA21: %s)\n"+
 				"💵 Price: *%s*\n"+
@@ -197,6 +285,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"✨ Pattern: %s\n"+
 				"📊 Confirmation: %s\n"+
 				"💎 Weekly Occurrences: %d\n",
+				alertHeader,
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
 				utils.FormatVolume(decimal.NewFromFloat(latestRecord.QuoteAssetVolume)),
@@ -216,6 +305,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				Symbol:    symbol,
 				CreatedAt: time.Now(),
 				Direction: direction,
+				Type:      latestRecord.Type,
 			}
 			if err := s.notificationLogRepo.Create(notificationLog); err != nil {
 				log.Printf("Lỗi lưu log thông báo cho %s: %v", symbol, err)
@@ -490,6 +580,7 @@ func NewScheduler2(autoVolumeService *AutoVolumeService) *Scheduler2 {
 func (s *Scheduler2) Start() {
 	log.Println("Scheduler Volume started")
 	// Hàm helper để tính thời gian đến giờ tiếp theo
+	go s.Run()
 	nextHour := func() time.Time {
 		now := time.Now()
 		next := now.Truncate(time.Hour).Add(time.Hour)
@@ -539,6 +630,7 @@ func NewScheduler3(autoVolumeService *AutoVolumeService, channelID string) *Sche
 }
 
 func (s *Scheduler3) Start() {
+	go s.Run()
 	// Hàm helper để tính thời gian đến giờ:02 phút tiếp theo
 	nextSchedule := func() time.Time {
 		now := time.Now()
@@ -569,4 +661,16 @@ func (s *Scheduler3) Run() {
 }
 func (s *Scheduler3) Stop() {
 	s.stopChan <- true
+}
+
+func parseKlineValue(value interface{}) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case string:
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return 0
 }

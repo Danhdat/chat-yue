@@ -69,6 +69,7 @@ type AutoVolumeRecord struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
+	Type             int            // 1: Alpha 0: Regular
 }
 
 func (AutoVolumeRecord) TableName() string {
@@ -131,6 +132,7 @@ type NotificationLog struct {
 	Symbol    string    `gorm:"not null;index"`
 	CreatedAt time.Time `gorm:"not null"`
 	Direction int       // "1:bullish", "2:bearish", "0:none"
+	Type      int       // 1: Alpha 0: Regular
 }
 
 // TableName định nghĩa tên bảng cho NotificationLog
