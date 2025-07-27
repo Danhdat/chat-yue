@@ -105,34 +105,46 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 
 	allSymbols := append(symbols, alphaSymbols...)
 
-	for _, symbol := range allSymbols {
-		// Lấy dữ liệu kline
+	for _, originalSymbol := range allSymbols {
+		// Xác định symbolType và resolved symbol trước khi xử lý klines
+		symbolType := 0
+		resolvedSymbol := originalSymbol
+
+		if isAlphaSymbol(originalSymbol) {
+			symbolType = 1
+			if actualSymbol, err := s.alphaRepo.GetNameByAlphaSymbol(originalSymbol); err == nil {
+				resolvedSymbol = actualSymbol
+			} else {
+				fmt.Printf("Lỗi lấy tên symbol cho %s: %v\n", originalSymbol, err)
+			}
+		}
+
+		// Lấy dữ liệu kline (dùng originalSymbol cho API call)
 		var klines [][]interface{}
 		var err error
 
-		if isAlphaSymbol(symbol) {
-			klines, err = s.fetchAlphaKlines(symbol + "USDT")
+		if symbolType == 1 {
+			klines, err = s.fetchAlphaKlines(originalSymbol + "USDT")
 		} else {
-			klines, err = s.fetchRegularKlines(symbol)
+			klines, err = s.fetchRegularKlines(originalSymbol)
 		}
 
 		if err != nil {
-			fmt.Printf("Lỗi lấy dữ liệu %s: %v\n", symbol, err)
+			fmt.Printf("Lỗi lấy dữ liệu %s: %v\n", originalSymbol, err)
 			continue
 		}
-		// Loại bỏ cây nến cuối cùng (chưa đóng) nếu có nhiều hơn 1 nến
+
+		// Xử lý klines (giữ nguyên như cũ)
 		if len(klines) > 1 {
 			klines = klines[:len(klines)-1]
 		}
-		// Lấy 22 nến đã đóng gần nhất
+
 		recentKlines := klines
 		if len(klines) > 22 {
 			recentKlines = klines[len(klines)-22:]
 		}
 
 		loc := time.FixedZone("UTC+7", 7*60*60)
-
-		// Tạo slice để lưu tất cả records cho symbol này
 		var records []models.AutoVolumeRecord
 
 		for _, k := range recentKlines {
@@ -147,20 +159,9 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 			highPrice, _ := strconv.ParseFloat(highPriceStr, 64)
 			lowPriceStr := k[3].(string)
 			lowPrice, _ := strconv.ParseFloat(lowPriceStr, 64)
-			symbolType := 0
-			if strings.Contains(symbol, "ALPHA_") {
-				symbolType = 1
-				actualSymbol, err := s.alphaRepo.GetNameByAlphaSymbol(symbol)
-				if err != nil {
-					fmt.Printf("Lỗi lấy tên symbol cho %s: %v\n", symbol, err)
-					// Có thể xử lý tiếp tục dùng symbol gốc hoặc bỏ qua
-				} else {
-					symbol = actualSymbol // Chỉ gán khi không có lỗi
-				}
-			}
 
 			record := models.AutoVolumeRecord{
-				Symbol:           symbol,
+				Symbol:           resolvedSymbol, // Dùng symbol đã resolve
 				OpenTime:         openTime,
 				QuoteAssetVolume: quoteAssetVolume,
 				OpenPrice:        openPrice,
@@ -174,11 +175,12 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 			records = append(records, record)
 		}
 
-		// Thay thế tất cả dữ liệu cũ bằng dữ liệu mới
-		if err := s.volumeRepo.ReplaceAllForSymbol(symbol, records); err != nil {
-			fmt.Printf("Lỗi lưu DB %s: %v\n", symbol, err)
+		// Lưu vào database với resolvedSymbol
+		if err := s.volumeRepo.ReplaceAllForSymbol(resolvedSymbol, records); err != nil {
+			fmt.Printf("Lỗi lưu DB %s: %v\n", resolvedSymbol, err)
 		} else {
-			fmt.Printf("Đã cập nhật %d records volume cho %s\n", len(records), symbol)
+			fmt.Printf("Đã cập nhật %d records volume cho %s (original: %s)\n",
+				len(records), resolvedSymbol, originalSymbol)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -630,8 +632,8 @@ func NewScheduler3(autoVolumeService *AutoVolumeService, channelID string) *Sche
 }
 
 func (s *Scheduler3) Start() {
-	go s.Run()
 	// Hàm helper để tính thời gian đến giờ:02 phút tiếp theo
+	go s.Run()
 	nextSchedule := func() time.Time {
 		now := time.Now()
 		// Cắt lẻ đến giờ, sau đó thêm 1 giờ + 2 phút (ví dụ: 8:30 → 9:02:00)
