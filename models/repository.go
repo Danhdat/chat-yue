@@ -323,7 +323,7 @@ func (r *AlphaSymbolRepository) GetAllAlphaSymbols() ([]string, error) {
 	var result []string
 	for _, s := range symbols {
 		if !s.CexOffDisplay {
-			result = append(result, s.AlphaID)
+			result = append(result, s.Symbol)
 		}
 	}
 	return result, nil

@@ -582,7 +582,6 @@ func NewScheduler2(autoVolumeService *AutoVolumeService) *Scheduler2 {
 func (s *Scheduler2) Start() {
 	log.Println("Scheduler Volume started")
 	// Hàm helper để tính thời gian đến giờ tiếp theo
-	go s.Run()
 	nextHour := func() time.Time {
 		now := time.Now()
 		next := now.Truncate(time.Hour).Add(time.Hour)
