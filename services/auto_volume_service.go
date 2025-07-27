@@ -196,7 +196,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 	if err != nil {
 		return err
 	}
-	alphaSymbols, err := s.alphaRepo.GetAllAlphaSymbols()
+	alphaSymbols, err := s.alphaRepo.GetAllAlphaName()
 	if err != nil {
 		return err
 	}
@@ -648,6 +648,7 @@ func (s *Scheduler3) Start() {
 	// Tạo timer với thời gian đến lần chạy tiếp theo (9:02:00 nếu now là 8:30:00)
 	timer := time.NewTimer(time.Until(nextSchedule()))
 	defer timer.Stop()
+	go s.Run()
 	for {
 		select {
 		case <-timer.C:

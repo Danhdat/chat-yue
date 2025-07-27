@@ -329,6 +329,21 @@ func (r *AlphaSymbolRepository) GetAllAlphaSymbols() ([]string, error) {
 	return result, nil
 }
 
+func (r *AlphaSymbolRepository) GetAllAlphaName() ([]string, error) {
+	var symbols []AlphaSymbol
+	err := r.db.Find(&symbols).Error
+	if err != nil {
+		return nil, err
+	}
+	var result []string
+	for _, s := range symbols {
+		if !s.CexOffDisplay {
+			result = append(result, s.Symbol)
+		}
+	}
+	return result, nil
+}
+
 func (r *AlphaSymbolRepository) GetNameByAlphaSymbol(symbol string) (string, error) {
 	var alphaSymbol AlphaSymbol
 	err := r.db.Where("alpha_id = ?", symbol).First(&alphaSymbol).Error
