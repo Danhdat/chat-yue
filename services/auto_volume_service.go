@@ -137,15 +137,24 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 			continue
 		}
 
-		// Xử lý klines (giữ nguyên như cũ)
+		// Xử lý klines - ĐẢM BẢO CÓ ĐỦ 22 NẾN ĐÃ ĐÓNG
+		// API trả về 23 nến: [nến 1, nến 2, ..., nến 22, nến 23]
+		// Trong đó nến 23 là nến đang hình thành (chưa đóng)
+
+		// Loại bỏ nến cuối cùng (nến 23 - đang hình thành) để chỉ lấy nến đã đóng
 		if len(klines) > 1 {
-			klines = klines[:len(klines)-1]
+			klines = klines[:len(klines)-1] // Kết quả: [nến 1, nến 2, ..., nến 22]
 		}
 
+		// Lấy 22 nến đã đóng (từ nến 1 đến nến 22)
 		recentKlines := klines
 		if len(klines) > 22 {
-			recentKlines = klines[len(klines)-22:]
+			recentKlines = klines[len(klines)-22:] // Lấy 22 nến cuối cùng
 		}
+
+		// Debug: In ra số lượng nến để kiểm tra
+		fmt.Printf("Symbol %s: API trả về %d nến, sau xử lý có %d nến\n",
+			resolvedSymbol, len(klines), len(recentKlines))
 
 		loc := time.FixedZone("UTC+7", 7*60*60)
 		var records []models.AutoVolumeRecord
@@ -214,7 +223,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		if processedSymbols[symbol] {
 			continue
 		}
-		records22, _ := s.volumeRepo.GetLastNBySymbol(symbol, 23)
+		records22, _ := s.volumeRepo.GetLastNBySymbol(symbol, 22) // Lấy 22 nến đã đóng
 		// Kiểm tra nếu không có dữ liệu
 		if len(records22) == 0 {
 			continue
@@ -227,7 +236,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		//chỉ tới cây nến 21
 		var totalCandlestickLength float64 = 0
 		var totalCandlestickBody float64 = 0
-		for _, r := range records22[1:] {
+		for _, r := range records22[1:] { // Bỏ qua records22[0] (nến 22 - mới nhất đã đóng)
 			totalCandlestickLength += r.CandlestickLength()
 			totalCandlestickBody += r.CandlestickBody()
 		}
@@ -235,11 +244,11 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 
 		volumeAnalysis := taService.analyzeVolumeFromFloat64(volumes)
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
-			// Lấy bản ghi MỚI NHẤT (records22[0]) - nến đang hình thành
+			// Lấy bản ghi MỚI NHẤT (records22[0]) - nến 22 (đã đóng gần nhất)
 			latestRecord := records22[0]
-			// lấy bản ghi cây nến thứ 21 (records22[1]) - nến đã đóng gần nhất
+			// lấy bản ghi cây nến thứ 21 (records22[1]) - nến 21
 			record21 := records22[1]
-			// lấy bản ghi cây nến thứ 20 (records22[2]) - nến đã đóng trước đó
+			// lấy bản ghi cây nến thứ 20 (records22[2]) - nến 20
 			record20 := records22[2]
 
 			// Lấy time hiện tại
@@ -393,8 +402,8 @@ type PatternDetectionResult struct {
 
 func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectionResult {
 	// QUAN TRỌNG: record20 và record21 giờ đây là nến ĐÃ ĐÓNG
-	// record20 = records[2] = nến đã đóng trước đó
-	// record21 = records[1] = nến đã đóng gần nhất
+	// record20 = records[1] = nến 21
+	// record21 = records[0] = nến 22 (đã đóng gần nhất)
 
 	if record20.Candlestick() == 0 &&
 		record21.Candlestick() == 1 &&
@@ -428,10 +437,10 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 	}
 
 	// QUAN TRỌNG: Phân tích Breakout trên nến ĐÃ ĐÓNG
-	// records[1] = nến đã đóng gần nhất (thay vì records[1] cũ)
-	// records[2] = nến đã đóng trước đó (thay vì records[2] cũ)
-	record20 := records[2] // Nến đã đóng trước đó
-	record21 := records[1] // Nến đã đóng gần nhất
+	// records[0] = nến 22 (đã đóng gần nhất)
+	// records[1] = nến 21 (đã đóng trước đó)
+	record20 := records[1] // Nến 21
+	record21 := records[0] // Nến 22 (đã đóng gần nhất)
 
 	// Tính resistance level (cao nhất của 5 nến trước nến hiện tại)
 	resistance := calculateResistance(records)
@@ -484,14 +493,14 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 		return PatternDetectionResult{IsDetected: false, Direction: 0}
 	}
 
-	// QUAN TRỌNG: Phân tích Hammer trên nến ĐÃ ĐÓNG (records[1]) thay vì nến đang hình thành (records[0])
-	// records[0] = nến đang hình thành (chưa đóng) - KHÔNG nên phân tích
-	// records[1] = nến đã đóng gần nhất - PHÂN TÍCH Ở ĐÂY
-	isDowntrend := checkDowntrendFromIndex(records, 2, 6)
-	body := records[1].CandlestickBody()
-	totalLength := records[1].CandlestickLength()
-	upperShadow := records[1].CandlestickUpperShadow()
-	lowerShadow := records[1].CandlestickLowerShadow()
+	// QUAN TRỌNG: Phân tích Hammer trên nến ĐÃ ĐÓNG (records[0]) - nến 22 (mới nhất đã đóng)
+	// records[0] = nến 22 (đã đóng gần nhất) - PHÂN TÍCH Ở ĐÂY
+	// records[1] = nến 21 (đã đóng trước đó)
+	isDowntrend := checkDowntrendFromIndex(records, 1, 5)
+	body := records[0].CandlestickBody()
+	totalLength := records[0].CandlestickLength()
+	upperShadow := records[0].CandlestickUpperShadow()
+	lowerShadow := records[0].CandlestickLowerShadow()
 
 	// Tiêu chuẩn nhận diện Hammer chuyên nghiệp
 	validBodySize := body <= totalLength*0.3      // Thân ≤ 30% tổng chiều dài
@@ -505,7 +514,7 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 		var direction int
 		hammerType := "🐂 Bullish"
 		confidence := "Tín hiệu mạnh"
-		if records[1].ClosePrice < records[1].OpenPrice {
+		if records[0].ClosePrice < records[0].OpenPrice {
 			hammerType = "🐻 Bearish (Hanging Man)"
 			confidence = "Cần nến tăng xác nhận"
 			direction = 2
@@ -539,10 +548,10 @@ func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult
 		return PatternDetectionResult{IsDetected: false, Direction: 0}
 	}
 
-	// QUAN TRỌNG: Phân tích Doji trên nến ĐÃ ĐÓNG (records[1]) thay vì nến đang hình thành (records[0])
-	// records[0] = nến đang hình thành (chưa đóng) - KHÔNG nên phân tích
-	// records[1] = nến đã đóng gần nhất - PHÂN TÍCH Ở ĐÂY
-	candle := records[1] // Nến đã đóng gần nhất
+	// QUAN TRỌNG: Phân tích Doji trên nến ĐÃ ĐÓNG (records[0]) - nến 22 (mới nhất đã đóng)
+	// records[0] = nến 22 (đã đóng gần nhất) - PHÂN TÍCH Ở ĐÂY
+	// records[1] = nến 21 (đã đóng trước đó)
+	candle := records[0] // Nến 22 (đã đóng gần nhất)
 	body := candle.CandlestickBody()
 	totalLength := candle.CandlestickLength()
 	upperShadow := candle.CandlestickUpperShadow()
@@ -553,10 +562,10 @@ func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult
 		return PatternDetectionResult{IsDetected: false, Direction: 0}
 	}
 
-	// Kiểm tra xu hướng trước đó (5 nến trước records[1])
-	// Sử dụng records[2] đến records[6] để kiểm tra xu hướng
-	isDowntrend := checkDowntrendFromIndex(records, 2, 6)
-	isUptrend := checkUptrendFromIndex(records, 2, 6)
+	// Kiểm tra xu hướng trước đó (5 nến trước records[0])
+	// Sử dụng records[1] đến records[5] để kiểm tra xu hướng
+	isDowntrend := checkDowntrendFromIndex(records, 1, 5)
+	isUptrend := checkUptrendFromIndex(records, 1, 5)
 
 	// Kiểm tra Dragonfly Doji (bóng dưới dài, bóng trên rất ngắn)
 	if upperShadow <= totalLength*shadowThreshold &&
