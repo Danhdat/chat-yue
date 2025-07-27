@@ -689,7 +689,7 @@ func (s *Scheduler2) Start() {
 	// Hàm helper để tính thời gian đến giờ tiếp theo
 	nextHour := func() time.Time {
 		now := time.Now()
-		next := now.Truncate(time.Hour).Add(time.Hour)
+		next := now.Truncate(time.Hour).Add(time.Hour + 2*time.Minute)
 		return next
 	}
 	// Tạo timer với thời gian đến giờ tiếp theo
@@ -739,8 +739,8 @@ func (s *Scheduler3) Start() {
 	// Hàm helper để tính thời gian đến giờ:02 phút tiếp theo
 	nextSchedule := func() time.Time {
 		now := time.Now()
-		// Cắt lẻ đến giờ, sau đó thêm 1 giờ + 2 phút (ví dụ: 8:30 → 9:02:00)
-		next := now.Truncate(time.Hour).Add(time.Hour + 2*time.Minute)
+		// Cắt lẻ đến giờ, sau đó thêm 1 giờ + 4 phút (ví dụ: 8:30 → 9:02:00)
+		next := now.Truncate(time.Hour).Add(time.Hour + 4*time.Minute)
 		return next
 	}
 	// Tạo timer với thời gian đến lần chạy tiếp theo (9:02:00 nếu now là 8:30:00)
