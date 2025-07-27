@@ -286,7 +286,8 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"🔖 Daily Occurrences: %d\n"+
 				"✨ Pattern: %s\n"+
 				"📊 Confirmation: %s\n"+
-				"💎 Weekly Occurrences: %d\n",
+				"💎 Weekly Occurrences: %d\n"+
+				"🔍 Test IDs - Record21: %d, Record20: %d\n", // Thêm dòng test
 				alertHeader,
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
@@ -299,6 +300,9 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				patternString,
 				confirmationString,
 				countofWeek+1,
+				record21.ID, // Thêm ID của record21
+				record20.ID, // Thêm ID của record20
+
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 
