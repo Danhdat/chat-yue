@@ -287,7 +287,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			}
 			// Tạo chuỗi hiển thị các nến từ records22[4] đến records22[0]
 			var candlestickPattern strings.Builder
-			candlestickPattern.WriteString("💡 Candlestick: ")
+			candlestickPattern.WriteString("💡 ")
 			for i := 4; i >= 0; i-- {
 				if records22[i].Candlestick() == 1 {
 					candlestickPattern.WriteString("🟢")
@@ -306,7 +306,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"✨ Pattern: %s\n"+
 				"📊 Confirmation: %s\n"+
 				"💎 Weekly Occurrences: %d\n"+
-				"%s\n"+
+				"%s\n",
 				alertHeader,
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
