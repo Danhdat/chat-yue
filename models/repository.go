@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -226,9 +227,43 @@ func NewNotificationLogRepository() *NotificationLogRepository {
 	return &NotificationLogRepository{db: DB}
 }
 
-// Create lưu log thông báo mới
+// Create lưu log thông báo mới - Tối ưu hóa
 func (r *NotificationLogRepository) Create(log *NotificationLog) error {
-	return r.db.Create(log).Error
+	// Sử dụng Select để chỉ insert các field cần thiết
+	return r.db.Select("symbol", "created_at", "direction", "type").Create(log).Error
+}
+
+// CreateBatch lưu nhiều log thông báo cùng lúc - Tối ưu hóa cho batch insert
+func (r *NotificationLogRepository) CreateBatch(logs []*NotificationLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+
+	// Sử dụng batch insert với size 100
+	batchSize := 100
+	for i := 0; i < len(logs); i += batchSize {
+		end := i + batchSize
+		if end > len(logs) {
+			end = len(logs)
+		}
+
+		batch := logs[i:end]
+		if err := r.db.Select("symbol", "created_at", "direction", "type").CreateInBatches(batch, len(batch)).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CreateAsync lưu log thông báo bất đồng bộ - Tối ưu hóa cho performance
+func (r *NotificationLogRepository) CreateAsync(log *NotificationLog) {
+	go func() {
+		if err := r.Create(log); err != nil {
+			// Log error nhưng không block main thread
+			// Sử dụng fmt.Printf thay vì log.Printf để tránh conflict với parameter name
+			fmt.Printf("Lỗi lưu log thông báo bất đồng bộ: %v\n", err)
+		}
+	}()
 }
 
 // CountBySymbolToday đếm số lần gửi tin nhắn cho một symbol trong ngày hôm nay

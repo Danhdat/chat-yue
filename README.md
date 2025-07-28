@@ -112,6 +112,244 @@ records22[2] = nến 20
 records22[21] = nến 1 (cũ nhất)
 ```
 
+## 🔄 Logic Chi tiết Function `FetchAndSaveAllSymbolsVolume()`
+
+### 📊 Luồng xử lý tổng quan:
+```go
+func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
+    // 1. Lấy danh sách symbols
+    symbols = ["BTCUSDT", "ETHUSDT", ...]           // Regular symbols
+    alphaSymbols = ["ALPHA_1", "ALPHA_2", ...]      // Alpha symbols  
+    allSymbols = symbols + alphaSymbols
+    
+    // 2. Xử lý từng symbol
+    for _, originalSymbol := range allSymbols {
+        // 3. Phân loại và resolve symbol
+        // 4. Gọi API tương ứng
+        // 5. Xử lý dữ liệu klines
+        // 6. Lưu vào database
+    }
+}
+```
+
+### 🎯 Chi tiết xử lý từng loại Symbol:
+Regular Symbols: "BTCUSDT" → API: "BTCUSDT" → DB: "BTCUSDT"
+Alpha Symbols: "ALPHA_1" → API: "ALPHA_1USDT" → DB: "Koma"
+
+#### **Regular Symbols (ví dụ: "BTCUSDT")**
+```go
+originalSymbol = "BTCUSDT"
+isAlphaSymbol("BTCUSDT") = false → symbolType = 0
+resolvedSymbol = "BTCUSDT" (giữ nguyên)
+API call: fetchRegularKlines("BTCUSDT")
+Lưu DB với Symbol = "BTCUSDT", Type = 0
+```
+
+#### **Alpha Symbols (ví dụ: "ALPHA_1")**
+```go
+originalSymbol = "ALPHA_1"
+isAlphaSymbol("ALPHA_1") = true → symbolType = 1
+actualSymbol = "Koma" (từ GetNameByAlphaSymbol("ALPHA_1"))
+resolvedSymbol = "Koma" (tên thật của token)
+API call: fetchAlphaKlines("ALPHA_1USDT")
+Lưu DB với Symbol = "Koma", Type = 1
+```
+
+### 🔧 Xử lý dữ liệu Klines:
+```go
+// 1. Lấy 23 nến từ API
+klines = fetchKlines(symbol, limit=23)
+
+// 2. Loại bỏ nến cuối (chưa đóng)
+if len(klines) > 1 {
+    klines = klines[:len(klines)-1]  // Bỏ nến cuối
+}
+
+// 3. Lấy 22 nến gần nhất
+recentKlines = klines
+if len(klines) > 22 {
+    recentKlines = klines[len(klines)-22:]
+}
+
+// 4. Chuyển đổi thành records
+for _, k := range recentKlines {
+    record := models.AutoVolumeRecord{
+        Symbol:           resolvedSymbol,  // Tên thật (BTCUSDT hoặc Koma)
+        OpenTime:         parseKlineValue(k[0]),
+        QuoteAssetVolume: parseFloat(k[7]),
+        OpenPrice:        parseFloat(k[1]),
+        ClosePrice:       parseFloat(k[4]),
+        HighPrice:        parseFloat(k[2]),
+        LowPrice:         parseFloat(k[3]),
+        Type:             symbolType,      // 0: Regular, 1: Alpha
+    }
+    records = append(records, record)
+}
+
+// 5. Lưu vào database
+volumeRepo.ReplaceAllForSymbol(resolvedSymbol, records)
+```
+
+### 🎯 Kết quả cuối cùng:
+| Loại | Original Symbol | API Call | DB Symbol | Type |
+|------|----------------|----------|-----------|------|
+| **Regular** | `"BTCUSDT"` | `"BTCUSDT"` | `"BTCUSDT"` | `0` |
+| **Alpha** | `"ALPHA_1"` | `"ALPHA_1USDT"` | `"Koma"` | `1` |
+
+### 🔍 Điểm quan trọng:
+- ✅ **API calls**: Sử dụng format gốc (`BTCUSDT`, `ALPHA_1USDT`)
+- ✅ **Database storage**: Sử dụng tên thật (`BTCUSDT`, `Koma`)
+- ✅ **Symbol resolution**: Alpha symbols được resolve thành tên dễ hiểu
+- ✅ **Type tracking**: Phân biệt loại symbol qua field `Type`
+- ✅ **Error handling**: Bỏ qua symbols không thể resolve
+- ✅ **Rate limiting**: Sleep 100ms giữa các API calls
+
+### 📝 Log output:
+```
+Đã cập nhật 22 records volume cho BTCUSDT (original: BTCUSDT)
+Đã cập nhật 22 records volume cho Koma (original: ALPHA_1)
+```
+
+## 🔍 So sánh các Hàm Phân tích Mô hình Kỹ thuật
+
+### 📊 Cấu trúc Dữ liệu
+Tất cả các hàm phân tích đều nhận tham số `records []models.AutoVolumeRecord` với 22 nến đã đóng:
+
+```go
+// Cấu trúc dữ liệu:
+records[0]  = nến 22 (mới nhất đã đóng) ← Phân tích chính
+records[1]  = nến 21 (đã đóng trước đó) ← So sánh
+records[2]  = nến 20 (đã đóng trước đó nữa)
+...
+records[21] = nến 1  (cũ nhất)
+```
+
+### 🎯 So sánh chi tiết các Hàm
+
+| Hàm | Tham số | Logic Phân tích | Điều kiện Phát hiện | Ưu tiên |
+|-----|---------|-----------------|-------------------|---------|
+| **`detectBreakout`** | `records, averageCandlestickBody` | Phân tích trên `records[0]` (nến 22) | - Nến tăng (1)<br>- Thân dài > 1.5x trung bình<br>- Volume > 1.2x nến trước<br>- Phá vỡ resistance | 🥇 **1st** |
+| **`detectEngulfing`** | `records` | So sánh `records[1]` vs `records[0]` | - Nến trước giảm (0) + Nến hiện tăng (1)<br>- Volume > 1.2x nến trước<br>- Giá engulfing | 🥈 **2nd** |
+| **`detectHammer`** | `records` | Phân tích trên `records[0]` (nến 22) | - Thân ≤ 30% tổng dài<br>- Bóng dưới ≥ 2x thân<br>- Bóng trên ≤ 0.5x thân<br>- Sau downtrend | 🥉 **3rd** |
+| **`detectDojiSpecial`** | `records` | Phân tích trên `records[0]` (nến 22) | - Thân ≤ 10% tổng dài<br>- Dragonfly/Gravestone patterns<br>- Kiểm tra xu hướng | 🏅 **4th** |
+
+### 🔧 Chi tiết từng Hàm
+
+#### 🚀 `detectBreakout` - Phá vỡ Kháng cự
+```go
+func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody float64) PatternDetectionResult {
+    // Phân tích trên nến 22 (records[0])
+    record21 := records[0] // Nến 22 (đã đóng gần nhất)
+    record20 := records[1] // Nến 21
+    
+    // Tính resistance từ nến 3-19
+    resistance := calculateResistance(records)
+    
+    // Điều kiện: Nến tăng + Thân dài + Volume cao + Phá vỡ
+    if record21.Candlestick() == 1 &&
+       record21.IsCandlestickBodyLong(averageCandlestickBody, 1.5) &&
+       record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
+       record20.ClosePrice < resistance &&
+       record21.ClosePrice > resistance {
+        return PatternDetectionResult{IsDetected: true, Direction: 1}
+    }
+}
+```
+
+#### ⚙️ `detectEngulfing` - Mô hình Nuốt
+```go
+func detectEngulfing(records []models.AutoVolumeRecord) PatternDetectionResult {
+    // So sánh nến 21 vs nến 22
+    // records[1] = nến 21, records[0] = nến 22
+    
+    // Bullish Engulfing: Nến 21 giảm + Nến 22 tăng
+    if records[1].Candlestick() == 0 && records[0].Candlestick() == 1 &&
+       records[0].QuoteAssetVolume > records[1].QuoteAssetVolume*1.2 &&
+       records[0].OpenPrice < records[1].ClosePrice &&
+       records[0].ClosePrice > records[1].OpenPrice {
+        return PatternDetectionResult{IsDetected: true, Direction: 1}
+    }
+    
+    // Bearish Engulfing: Nến 21 tăng + Nến 22 giảm
+    if records[1].Candlestick() == 1 && records[0].Candlestick() == 0 &&
+       records[0].QuoteAssetVolume > records[1].QuoteAssetVolume*1.2 &&
+       records[0].OpenPrice > records[1].ClosePrice &&
+       records[0].ClosePrice < records[1].OpenPrice {
+        return PatternDetectionResult{IsDetected: true, Direction: 2}
+    }
+}
+```
+
+#### 🔨 `detectHammer` - Mô hình Búa
+```go
+func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
+    // Phân tích trên nến 22 (records[0])
+    body := records[0].CandlestickBody()
+    totalLength := records[0].CandlestickLength()
+    upperShadow := records[0].CandlestickUpperShadow()
+    lowerShadow := records[0].CandlestickLowerShadow()
+    
+    // Tiêu chuẩn Hammer chuyên nghiệp
+    validBodySize := body <= totalLength*0.3      // Thân ≤ 30%
+    validLowerShadow := lowerShadow >= body*2     // Bóng dưới ≥ 2x thân
+    minimalUpperShadow := upperShadow <= body*0.5 // Bóng trên ≤ 0.5x thân
+    shadowRatio := lowerShadow >= upperShadow*3   // Bóng dưới ≥ 3x bóng trên
+    validPosition := isDowntrend                  // Sau downtrend
+    
+    if validBodySize && validLowerShadow && minimalUpperShadow && shadowRatio && validPosition {
+        return PatternDetectionResult{IsDetected: true, Direction: 1}
+    }
+}
+```
+
+#### 🎭 `detectDojiSpecial` - Mô hình Doji
+```go
+func detectDojiSpecial(records []models.AutoVolumeRecord) PatternDetectionResult {
+    // Phân tích trên nến 22 (records[0])
+    body := records[0].CandlestickBody()
+    totalLength := records[0].CandlestickLength()
+    upperShadow := records[0].CandlestickUpperShadow()
+    lowerShadow := records[0].CandlestickLowerShadow()
+    
+    // Kiểm tra điều kiện Doji
+    if body > totalLength*0.1 { // Thân > 10% → không phải Doji
+        return PatternDetectionResult{IsDetected: false}
+    }
+    
+    // Dragonfly Doji: Bóng dưới dài, bóng trên ngắn
+    if upperShadow <= totalLength*0.05 && lowerShadow >= totalLength*0.3 {
+        return PatternDetectionResult{IsDetected: true, Direction: 1}
+    }
+    
+    // Gravestone Doji: Bóng trên dài, bóng dưới ngắn
+    if lowerShadow <= totalLength*0.05 && upperShadow >= totalLength*0.3 {
+        return PatternDetectionResult{IsDetected: true, Direction: 2}
+    }
+}
+```
+
+### 🎯 Thứ tự Ưu tiên Phân tích
+```go
+// Ưu tiên: Breakout > Engulfing > Hammer > Doji
+direction := 0
+if breakoutResult.IsDetected {
+    direction = breakoutResult.Direction
+} else if engulfingResult.IsDetected {
+    direction = engulfingResult.Direction
+} else if hammerResult.IsDetected {
+    direction = hammerResult.Direction
+} else if dojiResult.IsDetected {
+    direction = dojiResult.Direction
+}
+```
+
+### 🔍 Đặc điểm chung
+- ✅ **Tất cả đều phân tích trên nến đã đóng** (không phải nến đang hình thành)
+- ✅ **Kiểm tra volume tăng** (1.2x so với nến trước)
+- ✅ **Trả về `PatternDetectionResult`** với Pattern, Confirmation, Direction
+- ✅ **Có kiểm tra điều kiện biên** để tránh lỗi
+- ✅ **Hỗ trợ cả Bullish (1) và Bearish (2)** directions
+
 ## 🎯 Các loại Symbol
 
 ### Regular Symbols

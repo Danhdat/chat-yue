@@ -246,10 +246,6 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
 			// Lấy bản ghi MỚI NHẤT (records22[0]) - nến 22 (đã đóng gần nhất)
 			latestRecord := records22[0]
-			// lấy bản ghi cây nến thứ 21 (records22[1]) - nến 21
-			record21 := records22[1]
-			// lấy bản ghi cây nến thứ 20 (records22[2]) - nến 20
-			record20 := records22[2]
 
 			// Lấy time hiện tại
 			currentTime := time.Now().In(loc)
@@ -259,7 +255,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			breakoutResult := detectBreakout(records22, averageCandlestickBody)
 			confirmation3 := breakoutResult.Confirmation
 			pattern3 := breakoutResult.Pattern
-			engulfingResult := detectEngulfing(record20, record21)
+			engulfingResult := detectEngulfing(records22)
 			confirmation1 := engulfingResult.Confirmation
 			pattern1 := engulfingResult.Pattern
 			dojiResult := detectDojiSpecial(records22)
@@ -312,22 +308,21 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				patternString,
 				confirmationString,
 				countofWeek+1,
-				record21.ID, // Thêm ID của record21
-				record20.ID, // Thêm ID của record20
+				records22[0].ID, // Thêm ID của record22
+				records22[1].ID, // Thêm ID của record21
 
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 
-			// Lưu log sau khi gửi
+			// Lưu log sau khi gửi - Sử dụng async để tối ưu performance
 			notificationLog := &models.NotificationLog{
 				Symbol:    symbol,
 				CreatedAt: time.Now(),
 				Direction: direction,
 				Type:      latestRecord.Type,
 			}
-			if err := s.notificationLogRepo.Create(notificationLog); err != nil {
-				log.Printf("Lỗi lưu log thông báo cho %s: %v", symbol, err)
-			}
+			// Sử dụng async insert để không block main thread
+			s.notificationLogRepo.CreateAsync(notificationLog)
 		}
 
 		// Đánh dấu symbol đã được xử lý
@@ -400,27 +395,26 @@ type PatternDetectionResult struct {
 	Direction    int
 }
 
-func detectEngulfing(record20, record21 models.AutoVolumeRecord) PatternDetectionResult {
-	// QUAN TRỌNG: record20 và record21 giờ đây là nến ĐÃ ĐÓNG
-	// record20 = records[1] = nến 21
-	// record21 = records[0] = nến 22 (đã đóng gần nhất)
+func detectEngulfing(records []models.AutoVolumeRecord) PatternDetectionResult {
+	// records[1] = nến 21
+	// records[0] = nến 22 (đã đóng gần nhất)
 
-	if record20.Candlestick() == 0 &&
-		record21.Candlestick() == 1 &&
-		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
-		record21.OpenPrice < record20.ClosePrice &&
-		record21.ClosePrice > record20.OpenPrice {
+	if records[1].Candlestick() == 0 &&
+		records[0].Candlestick() == 1 &&
+		records[0].QuoteAssetVolume > records[1].QuoteAssetVolume*1.2 &&
+		records[0].OpenPrice < records[1].ClosePrice &&
+		records[0].ClosePrice > records[1].OpenPrice {
 		return PatternDetectionResult{
 			Pattern:      "⚙️ Mô hình 🐂 Bullish Engulfing",
 			Confirmation: "✅ Đây là một tín hiệu đảo chiều tăng giá rất mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng giảm. Nó cho thấy phe mua đã hoàn toàn áp đảo phe bán",
 			IsDetected:   true,
 			Direction:    1,
 		}
-	} else if record20.Candlestick() == 1 &&
-		record21.Candlestick() == 0 &&
-		record21.QuoteAssetVolume > record20.QuoteAssetVolume*1.2 &&
-		record21.OpenPrice > record20.ClosePrice &&
-		record21.ClosePrice < record20.OpenPrice {
+	} else if records[1].Candlestick() == 1 &&
+		records[0].Candlestick() == 0 &&
+		records[0].QuoteAssetVolume > records[1].QuoteAssetVolume*1.2 &&
+		records[0].OpenPrice > records[1].ClosePrice &&
+		records[0].ClosePrice < records[1].OpenPrice {
 		return PatternDetectionResult{
 			Pattern:      "⚙️ Mô hình 🐻 Bearish Engulfing",
 			Confirmation: "🍎 Đây là một tín hiệu đảo chiều giảm giá mạnh mẽ, đặc biệt nếu nó xuất hiện sau một xu hướng tăng. Nó cho thấy phe bán đã hoàn toàn áp đảo phe mua",

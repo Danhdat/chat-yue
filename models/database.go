@@ -27,9 +27,12 @@ func InitDatabase() error {
 		cfg.DBName,
 	)
 
-	// Cấu hình GORM logger
+	// Cấu hình GORM logger - Tối ưu hóa cho production
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Warn), // Chỉ log warnings và errors
+		// Tối ưu hóa performance
+		SkipDefaultTransaction: true, // Bỏ qua transaction mặc định cho các operation đơn giản
+		PrepareStmt:            true, // Cache prepared statements
 	}
 
 	// Kết nối database
@@ -39,16 +42,17 @@ func InitDatabase() error {
 		return fmt.Errorf("không thể kết nối database: %v", err)
 	}
 
-	// Cấu hình connection pool
+	// Cấu hình connection pool - Tối ưu hóa cho high performance
 	sqlDB, err := DB.DB()
 	if err != nil {
 		return fmt.Errorf("không thể lấy connection pool: %v", err)
 	}
 
-	// Cấu hình connection pool
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
+	// Cấu hình connection pool tối ưu
+	sqlDB.SetMaxIdleConns(20)  // Tăng số connection idle
+	sqlDB.SetMaxOpenConns(200) // Tăng số connection tối đa
 	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetConnMaxIdleTime(30 * time.Minute) // Giảm thời gian idle
 
 	log.Println("✅ Kết nối database PostgreSQL thành công")
 	return nil
