@@ -285,6 +285,17 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			if latestRecord.Type == 1 {
 				alertHeader = "*[ALPHA BINANCE]* 🚨" // Thêm icon cảnh báo đặc biệt
 			}
+			// Tạo chuỗi hiển thị các nến từ records22[4] đến records22[0]
+			var candlestickPattern strings.Builder
+			candlestickPattern.WriteString("💡 Candlestick: ")
+			for i := 4; i >= 0; i-- {
+				if records22[i].Candlestick() == 1 {
+					candlestickPattern.WriteString("🟢")
+				} else {
+					candlestickPattern.WriteString("🔴")
+				}
+			}
+
 			message := fmt.Sprintf("💰%s *[ALERT]* Symbol: *%s*\n"+
 				"📅 Time: %s\n"+
 				"🚀 Volume: *%s* (SMA21: %s)\n"+
@@ -295,7 +306,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				"✨ Pattern: %s\n"+
 				"📊 Confirmation: %s\n"+
 				"💎 Weekly Occurrences: %d\n"+
-				"🔍 Test IDs - Record21: %d, Record20: %d\n", // Thêm dòng test
+				"%s\n"+
 				alertHeader,
 				strings.TrimSuffix(latestRecord.Symbol, "USDT"),
 				formattedTime,
@@ -308,9 +319,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				patternString,
 				confirmationString,
 				countofWeek+1,
-				records22[0].ID, // Thêm ID của record22
-				records22[1].ID, // Thêm ID của record21
-
+				candlestickPattern.String(),
 			)
 			s.telegramBotService.SendTelegramToChannel(channelID, message)
 
