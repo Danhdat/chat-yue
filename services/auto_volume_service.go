@@ -243,9 +243,9 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		averageCandlestickBody := totalCandlestickBody / float64(len(records22)-1)
 
 		volumeAnalysis := taService.analyzeVolumeFromFloat64(volumes)
-		if volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG" {
-			// Lấy bản ghi MỚI NHẤT (records22[0]) - nến 22 (đã đóng gần nhất)
-			latestRecord := records22[0]
+		// Lấy bản ghi MỚI NHẤT (records22[0]) - nến 22 (đã đóng gần nhất)
+		latestRecord := records22[0]
+		if (volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG") && latestRecord.QuoteAssetVolume > 500 {
 
 			// Lấy time hiện tại
 			currentTime := time.Now().In(loc)
@@ -504,6 +504,12 @@ func detectHammer(records []models.AutoVolumeRecord) PatternDetectionResult {
 	totalLength := records[0].CandlestickLength()
 	upperShadow := records[0].CandlestickUpperShadow()
 	lowerShadow := records[0].CandlestickLowerShadow()
+
+	// KIỂM TRA ĐIỀU KIỆN ĐỂ TRÁNH NaN
+	// Nếu totalLength = 0 (HighPrice = LowPrice), không thể phân tích
+	if totalLength <= 0 {
+		return PatternDetectionResult{IsDetected: false, Direction: 0}
+	}
 
 	// Tiêu chuẩn nhận diện Hammer chuyên nghiệp
 	validBodySize := body <= totalLength*0.3      // Thân ≤ 30% tổng chiều dài
