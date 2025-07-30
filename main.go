@@ -61,6 +61,8 @@ func main() {
 	reportService := services.NewReportService(botService)
 	scheduler4 := services.NewScheduler4(reportService, botService.GetChannelID())
 	go scheduler4.Start()
+	scheduler5 := services.NewScheduler5(reportService)
+	go scheduler5.Start()
 
 	// Tạo channel để nhận tín hiệu dừng
 	stopChan := make(chan os.Signal, 1)
@@ -81,6 +83,7 @@ func main() {
 	scheduler2.Stop()
 	scheduler3.Stop()
 	scheduler4.Stop()
+	scheduler5.Stop()
 	time.Sleep(2 * time.Second)
 	log.Println("🛑 Bot đã dừng")
 

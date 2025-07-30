@@ -190,3 +190,61 @@ func (s *Scheduler4) Start() {
 		}
 	}
 }
+
+type Scheduler5 struct {
+	reportService *ReportService
+	stopChan      chan bool
+}
+
+func NewScheduler5(reportService *ReportService) *Scheduler5 {
+	return &Scheduler5{
+		reportService: reportService,
+		stopChan:      make(chan bool),
+	}
+}
+
+func (s *Scheduler5) Run() {
+	if err := s.reportService.notificationLogRepo.DeleteLogMonth(); err != nil {
+		log.Printf("Lỗi khi xóa log tháng: %v", err)
+	}
+	log.Println("Xóa log tháng thành công")
+}
+func (s *Scheduler5) Stop() {
+	s.stopChan <- true
+}
+func (s *Scheduler5) Start() {
+	// Thiết lập múi giờ UTC+7
+	loc := time.FixedZone("UTC+7", 7*60*60)
+
+	// Hàm helper để tính thời gian đến 23:55 ngày 28 tháng tiếp theo
+	nextSchedule := func() time.Time {
+		now := time.Now().In(loc) // Chuyển thời gian hiện tại sang UTC+7
+
+		// Tạo thời điểm 23:55 ngày 28 tháng hiện tại
+		currentMonth28 := time.Date(now.Year(), now.Month(), 28, 23, 55, 0, 0, loc)
+
+		// Nếu đã qua ngày 28 tháng này, tính ngày 28 tháng tiếp theo
+		if now.After(currentMonth28) {
+			// Chuyển sang tháng tiếp theo
+			nextMonth := currentMonth28.AddDate(0, 1, 0)
+			return nextMonth
+		}
+
+		return currentMonth28
+	}
+
+	// Tạo timer với thời gian đến lần chạy tiếp theo
+	timer := time.NewTimer(time.Until(nextSchedule()))
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			go s.Run()
+			timer.Reset(time.Until(nextSchedule()))
+		case <-s.stopChan:
+			log.Println("Scheduler stopped")
+			return
+		}
+	}
+}

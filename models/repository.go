@@ -325,6 +325,9 @@ func firstDayOfISOWeek(year, week int, loc *time.Location) time.Time {
 	}
 	return date
 }
+func (r *NotificationLogRepository) DeleteLogMonth() error {
+	return r.db.Where("created_at < ?", time.Now().AddDate(0, -1, 0)).Delete(&NotificationLog{}).Error
+}
 
 // ALPHA BINANCE
 type AlphaSymbolRepository struct {

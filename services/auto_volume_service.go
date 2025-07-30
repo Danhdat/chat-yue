@@ -283,7 +283,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 			}
 			alertHeader := "*[CEX]*"
 			if latestRecord.Type == 1 {
-				alertHeader = "*[ALPHA BINANCE]* 🚨" // Thêm icon cảnh báo đặc biệt
+				alertHeader = "*[ALPHA BINANCE]* 🦁" // Thêm icon cảnh báo đặc biệt
 			}
 			// Tạo chuỗi hiển thị các nến từ records22[4] đến records22[0]
 			var candlestickPattern strings.Builder
@@ -374,7 +374,7 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 		volumeSignal = "🔥 VOLUME EXPLOSION"
 		volumeStrength = "EXTREME"
 	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_2X)) {
-		volumeSignal = "🚀 HIGH VOLUME SPIKE"
+		volumeSignal = "🚀 HIGH VOLUME"
 		volumeStrength = "STRONG"
 	} else if volumeRatio.GreaterThanOrEqual(decimal.NewFromFloat(models.VOLUME_SPIKE_1_5X)) {
 		volumeSignal = "📈 ABOVE AVERAGE VOLUME"
