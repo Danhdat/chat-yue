@@ -183,6 +183,7 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 				CreatedAt:        time.Now().In(loc),
 				UpdatedAt:        time.Now().In(loc),
 				Type:             symbolType,
+				AlphaID:          originalSymbol,
 			}
 			records = append(records, record)
 		}
@@ -243,9 +244,10 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 		averageCandlestickBody := totalCandlestickBody / float64(len(records22)-1)
 
 		volumeAnalysis := taService.analyzeVolumeFromFloat64(volumes)
+
 		// Lấy bản ghi MỚI NHẤT (records22[0]) - nến 22 (đã đóng gần nhất)
 		latestRecord := records22[0]
-		if (volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG") && latestRecord.QuoteAssetVolume > 500 {
+		if (volumeAnalysis.VolumeStrength == "EXTREME" || volumeAnalysis.VolumeStrength == "STRONG") && latestRecord.QuoteAssetVolume > 1000 && !checkAllRedCandles(records22) {
 
 			// Lấy time hiện tại
 			currentTime := time.Now().In(loc)
@@ -321,7 +323,8 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				countofWeek+1,
 				candlestickPattern.String(),
 			)
-			s.telegramBotService.SendTelegramToChannel(channelID, message)
+
+			s.telegramBotService.SendTelegramToChannelWithAdvancedButton(channelID, message, strings.TrimSuffix(latestRecord.Symbol, "USDT"))
 
 			// Lưu log sau khi gửi - Sử dụng async để tối ưu performance
 			notificationLog := &models.NotificationLog{
@@ -799,4 +802,14 @@ func parseKlineValue(value interface{}) float64 {
 		}
 	}
 	return 0
+}
+
+// Hàm kiểm tra các nến từ records22[4] đến records22[0] đều là nến đỏ
+func checkAllRedCandles(records []models.AutoVolumeRecord) bool {
+	for i := 4; i >= 0; i-- {
+		if records[i].Candlestick() == 0 {
+			return false
+		}
+	}
+	return true
 }

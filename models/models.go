@@ -70,6 +70,7 @@ type AutoVolumeRecord struct {
 	UpdatedAt        time.Time
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
 	Type             int            // 1: Alpha 0: Regular
+	AlphaID          string
 }
 
 func (AutoVolumeRecord) TableName() string {

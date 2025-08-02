@@ -334,6 +334,29 @@ func (s *TelegramBotService) SendTelegramToChannel(channelID, message string) {
 		log.Printf("Lỗi khi gửi tin nhắn đến channel: %v", err)
 	}
 }
+
+// SendTelegramToChannelWithAdvancedButton gửi tin nhắn đến channel với button phân tích nâng cao
+func (s *TelegramBotService) SendTelegramToChannelWithAdvancedButton(channelID, message string, symbol string) {
+	log.Println("Sending message with advanced analysis button to channel: ", channelID)
+
+	msg := tgbotapi.NewMessageToChannel(channelID, message)
+	msg.ParseMode = "Markdown"
+
+	// Tạo inline keyboard với button phân tích nâng cao
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🤖 Phân tích nâng cao", fmt.Sprintf("advanced_analysis_%s", symbol)),
+		),
+	)
+
+	msg.ReplyMarkup = keyboard
+
+	_, err := s.bot.Send(msg)
+	if err != nil {
+		log.Printf("Lỗi khi gửi tin nhắn với button đến channel: %v", err)
+	}
+}
+
 func (s *TelegramBotService) GetChannelID() string {
 	return s.channelID
 }
