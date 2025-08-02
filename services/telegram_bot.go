@@ -23,6 +23,7 @@ type TelegramBotService struct {
 	cryptoAPI  *CryptoAPIService
 	indicators *TechnicalAnalysisService
 	analysis   *AnalysisService
+	mlService  *MLService
 	chatID     int64
 	channelID  string
 }
@@ -94,6 +95,7 @@ func NewTelegramBotService() (*TelegramBotService, error) {
 		cryptoAPI:  NewCryptoAPIService(),
 		indicators: NewTechnicalAnalysisService(),
 		analysis:   NewAnalysisService(),
+		mlService:  NewMLService(),
 		chatID:     chatID,
 		channelID:  channelID,
 	}, nil
@@ -111,6 +113,13 @@ func (s *TelegramBotService) StartBot() {
 	log.Printf("Bot đã khởi động: %s", s.bot.Self.UserName)
 
 	for update := range updates {
+		// Xử lý callback query (button clicks)
+		if update.CallbackQuery != nil {
+			s.handleCallbackQuery(update.CallbackQuery)
+			continue
+		}
+
+		// Xử lý tin nhắn thông thường
 		if update.Message == nil {
 			continue
 		}
@@ -339,19 +348,30 @@ func (s *TelegramBotService) SendTelegramToChannel(channelID, message string) {
 func (s *TelegramBotService) SendTelegramToChannelWithAdvancedButton(channelID, message string, symbol string) {
 	log.Println("Sending message with advanced analysis button to channel: ", channelID)
 
-	msg := tgbotapi.NewMessageToChannel(channelID, message)
+	// Thực hiện phân tích OpenAI trước
+	openAIAnalysis, err := s.mlService.AnalyzeSymbolWithOpenAI(symbol)
+	if err != nil {
+		log.Printf("Lỗi khi phân tích OpenAI cho symbol %s: %v", symbol, err)
+		// Nếu lỗi, vẫn gửi tin nhắn gốc nhưng không có phân tích OpenAI
+		openAIAnalysis = "❌ Không thể phân tích nâng cao do lỗi kỹ thuật"
+	}
+
+	// Thêm phân tích OpenAI vào message
+	enhancedMessage := message + "\n\n" + "🤖 **Phân tích AI:**\n" + openAIAnalysis
+
+	msg := tgbotapi.NewMessageToChannel(channelID, enhancedMessage)
 	msg.ParseMode = "Markdown"
 
 	// Tạo inline keyboard với button phân tích nâng cao
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🤖 Phân tích nâng cao", fmt.Sprintf("advanced_analysis_%s", symbol)),
+			tgbotapi.NewInlineKeyboardButtonData("🔄 Cập nhật phân tích", fmt.Sprintf("advanced_analysis_%s", symbol)),
 		),
 	)
 
 	msg.ReplyMarkup = keyboard
 
-	_, err := s.bot.Send(msg)
+	_, err = s.bot.Send(msg)
 	if err != nil {
 		log.Printf("Lỗi khi gửi tin nhắn với button đến channel: %v", err)
 	}
@@ -364,4 +384,55 @@ func (s *TelegramBotService) GetChannelID() string {
 // Stop dừng bot
 func (s *TelegramBotService) Stop() {
 	log.Println("🛑 Đang dừng bot...")
+}
+
+// handleCallbackQuery xử lý callback query từ inline keyboard
+func (s *TelegramBotService) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
+	log.Printf("Nhận callback query: %s", callback.Data)
+
+	// Trả lời callback query để bỏ loading state
+	callbackResponse := tgbotapi.NewCallback(callback.ID, "")
+	_, err := s.bot.Request(callbackResponse)
+	if err != nil {
+		log.Printf("Lỗi khi trả lời callback query: %v", err)
+	}
+
+	// Xử lý các loại callback khác nhau
+	if strings.HasPrefix(callback.Data, "advanced_analysis_") {
+		s.handleAdvancedAnalysisCallback(callback)
+	}
+}
+
+// handleAdvancedAnalysisCallback xử lý callback cho phân tích nâng cao
+func (s *TelegramBotService) handleAdvancedAnalysisCallback(callback *tgbotapi.CallbackQuery) {
+	// Trích xuất symbol từ callback data
+	parts := strings.Split(callback.Data, "_")
+	if len(parts) < 3 {
+		log.Printf("Callback data không hợp lệ: %s", callback.Data)
+		return
+	}
+
+	symbol := strings.Join(parts[2:], "_") // Ghép lại các phần còn lại để xử lý symbol có dấu gạch dưới
+
+	log.Printf("Thực hiện phân tích nâng cao cho symbol: %s", symbol)
+
+	// Thực hiện phân tích OpenAI
+	openAIAnalysis, err := s.mlService.AnalyzeSymbolWithOpenAI(symbol)
+	if err != nil {
+		log.Printf("Lỗi khi phân tích OpenAI cho symbol %s: %v", symbol, err)
+		openAIAnalysis = "❌ Không thể phân tích nâng cao do lỗi kỹ thuật"
+	}
+
+	// Tạo tin nhắn cập nhật
+	updateMessage := fmt.Sprintf("🤖 **Phân tích AI cập nhật cho %s:**\n\n%s", symbol, openAIAnalysis)
+
+	// Gửi tin nhắn cập nhật
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, updateMessage)
+	msg.ParseMode = "Markdown"
+	msg.ReplyToMessageID = callback.Message.MessageID
+
+	_, err = s.bot.Send(msg)
+	if err != nil {
+		log.Printf("Lỗi khi gửi tin nhắn cập nhật: %v", err)
+	}
 }
