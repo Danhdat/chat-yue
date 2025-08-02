@@ -348,30 +348,19 @@ func (s *TelegramBotService) SendTelegramToChannel(channelID, message string) {
 func (s *TelegramBotService) SendTelegramToChannelWithAdvancedButton(channelID, message string, symbol string) {
 	log.Println("Sending message with advanced analysis button to channel: ", channelID)
 
-	// Thực hiện phân tích OpenAI trước
-	openAIAnalysis, err := s.mlService.AnalyzeSymbolWithOpenAI(symbol)
-	if err != nil {
-		log.Printf("Lỗi khi phân tích OpenAI cho symbol %s: %v", symbol, err)
-		// Nếu lỗi, vẫn gửi tin nhắn gốc nhưng không có phân tích OpenAI
-		openAIAnalysis = "❌ Không thể phân tích nâng cao do lỗi kỹ thuật"
-	}
-
-	// Thêm phân tích OpenAI vào message
-	enhancedMessage := message + "\n\n" + "🤖 **Phân tích AI:**\n" + openAIAnalysis
-
-	msg := tgbotapi.NewMessageToChannel(channelID, enhancedMessage)
+	msg := tgbotapi.NewMessageToChannel(channelID, message)
 	msg.ParseMode = "Markdown"
 
 	// Tạo inline keyboard với button phân tích nâng cao
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔄 Cập nhật phân tích", fmt.Sprintf("advanced_analysis_%s", symbol)),
+			tgbotapi.NewInlineKeyboardButtonData("🤖 Phân tích AI", fmt.Sprintf("advanced_analysis_%s", symbol)),
 		),
 	)
 
 	msg.ReplyMarkup = keyboard
 
-	_, err = s.bot.Send(msg)
+	_, err := s.bot.Send(msg)
 	if err != nil {
 		log.Printf("Lỗi khi gửi tin nhắn với button đến channel: %v", err)
 	}
@@ -423,16 +412,16 @@ func (s *TelegramBotService) handleAdvancedAnalysisCallback(callback *tgbotapi.C
 		openAIAnalysis = "❌ Không thể phân tích nâng cao do lỗi kỹ thuật"
 	}
 
-	// Tạo tin nhắn cập nhật
-	updateMessage := fmt.Sprintf("🤖 **Phân tích AI cập nhật cho %s:**\n\n%s", symbol, openAIAnalysis)
+	// Tạo tin nhắn phân tích AI
+	analysisMessage := fmt.Sprintf("🤖 **Phân tích AI cho %s:**\n\n%s", symbol, openAIAnalysis)
 
-	// Gửi tin nhắn cập nhật
-	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, updateMessage)
+	// Gửi tin nhắn phân tích AI
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, analysisMessage)
 	msg.ParseMode = "Markdown"
 	msg.ReplyToMessageID = callback.Message.MessageID
 
 	_, err = s.bot.Send(msg)
 	if err != nil {
-		log.Printf("Lỗi khi gửi tin nhắn cập nhật: %v", err)
+		log.Printf("Lỗi khi gửi tin nhắn phân tích AI: %v", err)
 	}
 }
