@@ -378,6 +378,7 @@ func (s *TelegramBotService) Stop() {
 // handleCallbackQuery xử lý callback query từ inline keyboard
 func (s *TelegramBotService) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	log.Printf("Nhận callback query: %s", callback.Data)
+	log.Printf("Callback từ chat: %s (ID: %d)", callback.Message.Chat.Title, callback.Message.Chat.ID)
 
 	// Trả lời callback query để bỏ loading state
 	callbackResponse := tgbotapi.NewCallback(callback.ID, "")
@@ -388,6 +389,7 @@ func (s *TelegramBotService) handleCallbackQuery(callback *tgbotapi.CallbackQuer
 
 	// Xử lý các loại callback khác nhau
 	if strings.HasPrefix(callback.Data, "advanced_analysis_") {
+		log.Printf("Xử lý advanced analysis callback")
 		s.handleAdvancedAnalysisCallback(callback)
 	}
 }
@@ -404,6 +406,10 @@ func (s *TelegramBotService) handleAdvancedAnalysisCallback(callback *tgbotapi.C
 	symbol := strings.Join(parts[2:], "_") // Ghép lại các phần còn lại để xử lý symbol có dấu gạch dưới
 
 	log.Printf("Thực hiện phân tích nâng cao cho symbol: %s", symbol)
+	log.Printf("Channel info - Title: %s, Username: %s, ID: %d",
+		callback.Message.Chat.Title,
+		callback.Message.Chat.UserName,
+		callback.Message.Chat.ID)
 
 	// Thực hiện phân tích OpenAI
 	openAIAnalysis, err := s.mlService.AnalyzeSymbolWithOpenAI(symbol)
@@ -415,13 +421,17 @@ func (s *TelegramBotService) handleAdvancedAnalysisCallback(callback *tgbotapi.C
 	// Tạo tin nhắn phân tích AI
 	analysisMessage := fmt.Sprintf("🤖 **Phân tích AI cho %s:**\n\n%s", symbol, openAIAnalysis)
 
-	// Gửi tin nhắn phân tích AI
-	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, analysisMessage)
+	// Gửi tin nhắn phân tích AI vào channel
+	msg := tgbotapi.NewMessageToChannel(callback.Message.Chat.UserName, analysisMessage)
 	msg.ParseMode = "Markdown"
 	msg.ReplyToMessageID = callback.Message.MessageID
+
+	log.Printf("Gửi tin nhắn phân tích AI vào channel: %s", callback.Message.Chat.UserName)
 
 	_, err = s.bot.Send(msg)
 	if err != nil {
 		log.Printf("Lỗi khi gửi tin nhắn phân tích AI: %v", err)
+	} else {
+		log.Printf("✅ Đã gửi tin nhắn phân tích AI thành công")
 	}
 }
