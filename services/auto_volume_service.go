@@ -324,7 +324,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 				candlestickPattern.String(),
 			)
 
-			s.telegramBotService.SendTelegramToChannelWithAdvancedButton(channelID, message, strings.TrimSuffix(latestRecord.Symbol, "USDT"))
+			s.telegramBotService.SendTelegramToChannelWithAdvancedButton(channelID, message, latestRecord.AlphaID)
 
 			// Lưu log sau khi gửi - Sử dụng async để tối ưu performance
 			notificationLog := &models.NotificationLog{
@@ -807,7 +807,7 @@ func parseKlineValue(value interface{}) float64 {
 // Hàm kiểm tra các nến từ records22[4] đến records22[0] đều là nến đỏ
 func checkAllRedCandles(records []models.AutoVolumeRecord) bool {
 	for i := 4; i >= 0; i-- {
-		if records[i].Candlestick() == 0 {
+		if records[i].Candlestick() == 1 {
 			return false
 		}
 	}
