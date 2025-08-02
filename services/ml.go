@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -31,20 +32,22 @@ type OpenAIRequest struct {
 type OpenAIResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
-	Created int64  `json:"created"`
+	Created int64  `json:"created_at"`
 	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
+	Output  []struct {
+		ID      string `json:"id"`
+		Type    string `json:"type"`
+		Status  string `json:"status"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		Role string `json:"role"`
+	} `json:"output"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+		TotalTokens  int `json:"total_tokens"`
 	} `json:"usage"`
 }
 
@@ -83,9 +86,11 @@ func (s *MLService) AnalyzeSymbolWithOpenAI(originalSymbol string) (string, erro
 		return "", fmt.Errorf("lỗi lấy dữ liệu %s: %v", originalSymbol, err)
 	}
 
-	// Bước 3: Xử lý klines - loại bỏ nến cuối cùng (đang hình thành)
-	if len(klines) > 1 {
-		klines = klines[:len(klines)-1]
+	// Bước 3: Xử lý klines - chỉ lấy 30 nến gần nhất để giảm context
+	if len(klines) > 30 {
+		klines = klines[len(klines)-30:] // Lấy 30 nến cuối cùng
+	} else if len(klines) > 1 {
+		klines = klines[:len(klines)-1] // Loại bỏ nến cuối cùng (đang hình thành)
 	}
 
 	// Bước 4: Tính toán các indicators
@@ -124,42 +129,39 @@ func (s *MLService) calculateIndicators(klines [][]interface{}) (string, string,
 
 	// Tính RSI (chỉ lấy giá trị cuối cùng)
 	rsiValue := s.indicators.CalculateRSI(prices, 14)
-	rsiData := fmt.Sprintf("1:%.4f", rsiValue)
+	rsiData := fmt.Sprintf("%.2f", rsiValue)
 
 	// Tính SMA (tính trung bình của 20 giá cuối)
 	var smaData string
 	if len(prices) >= 20 {
 		smaValue := s.indicators.calculateSMA(prices[len(prices)-20:], 20)
-		smaData = fmt.Sprintf("1:%.4f", smaValue)
+		smaData = fmt.Sprintf("%.2f", smaValue)
 	} else {
-		smaData = "1:0.0000"
+		smaData = "0.00"
 	}
 
 	// Tính EMA 9
 	ema9Value := s.indicators.CalculateEMA(prices, 9)
-	ema9Data := fmt.Sprintf("1:%.4f", ema9Value)
+	ema9Data := fmt.Sprintf("%.2f", ema9Value)
 
 	// Tính EMA 21
 	ema21Value := s.indicators.CalculateEMA(prices, 21)
-	ema21Data := fmt.Sprintf("1:%.4f", ema21Value)
+	ema21Data := fmt.Sprintf("%.2f", ema21Value)
 
 	// Tính EMA 50
 	ema50Value := s.indicators.CalculateEMA(prices, 50)
-	ema50Data := fmt.Sprintf("1:%.4f", ema50Value)
+	ema50Data := fmt.Sprintf("%.2f", ema50Value)
 
 	return rsiData, smaData, ema9Data, ema21Data, ema50Data, nil
 }
 
-// Format dữ liệu kline
+// Format dữ liệu kline - tối ưu hóa để giảm kích thước
 func (s *MLService) formatKlineData(klines [][]interface{}) string {
 	var result []string
 	for i, kline := range klines {
-		// Format: "index:open,high,low,close,volume"
-		line := fmt.Sprintf("%d:%s,%s,%s,%s,%s",
+		// Format tối ưu: "index:close,volume" (chỉ lấy close price và volume)
+		line := fmt.Sprintf("%d:%s,%s",
 			i+1,
-			kline[1], // open
-			kline[2], // high
-			kline[3], // low
 			kline[4], // close
 			kline[7], // quote asset volume
 		)
@@ -186,7 +188,7 @@ func (s *MLService) callOpenAIAPI(symbol, klineData, rsiData, smaData, ema9Data,
 
 	request := OpenAIRequest{}
 	request.Prompt.ID = "pmpt_688998fee2bc819491c6112cafd3cea1070efa35b2150e15"
-	request.Prompt.Version = "9"
+	request.Prompt.Version = "10"
 	request.Prompt.Variables = map[string]interface{}{
 		"symbol":     symbol,
 		"kline_data": klineData,
@@ -201,6 +203,11 @@ func (s *MLService) callOpenAIAPI(symbol, klineData, rsiData, smaData, ema9Data,
 	if err != nil {
 		return "", fmt.Errorf("lỗi marshal request: %v", err)
 	}
+
+	// Log kích thước dữ liệu để debug
+	log.Printf("Kích thước dữ liệu gửi đến OpenAI: %d bytes", len(jsonData))
+	log.Printf("Kích thước kline_data: %d chars", len(klineData))
+	log.Printf("Kích thước rsi_data: %d chars", len(rsiData))
 
 	req, err := http.NewRequest("POST", "https://api.openai.com/v1/responses", bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -231,15 +238,22 @@ func (s *MLService) callOpenAIAPI(symbol, klineData, rsiData, smaData, ema9Data,
 		return "", fmt.Errorf("lỗi parse response: %v", err)
 	}
 
-	if len(openAIResponse.Choices) == 0 {
+	log.Printf("OpenAI response parsed - Output count: %d", len(openAIResponse.Output))
+
+	if len(openAIResponse.Output) == 0 {
 		return "", fmt.Errorf("không có response từ OpenAI")
 	}
 
-	return openAIResponse.Choices[0].Message.Content, nil
+	// Lấy text từ output đầu tiên
+	if len(openAIResponse.Output[0].Content) == 0 {
+		return "", fmt.Errorf("không có content trong output")
+	}
+
+	return openAIResponse.Output[0].Content[0].Text, nil
 }
 
 func (s *MLService) fetchRegularKlinesforMLsystem(symbol string) ([][]interface{}, error) {
-	url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=1d&limit=1000", symbol)
+	url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=1d&limit=33", symbol)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -260,7 +274,7 @@ func (s *MLService) fetchRegularKlinesforMLsystem(symbol string) ([][]interface{
 }
 
 func (s *MLService) fetchAlphaKlinesforMLsystem(symbol string) ([][]interface{}, error) {
-	url := fmt.Sprintf("https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?interval=1d&limit=1000&symbol=%s", symbol)
+	url := fmt.Sprintf("https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?interval=1d&limit=33&symbol=%s", symbol)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err

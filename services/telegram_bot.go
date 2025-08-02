@@ -406,10 +406,10 @@ func (s *TelegramBotService) handleAdvancedAnalysisCallback(callback *tgbotapi.C
 	symbol := strings.Join(parts[2:], "_") // Ghép lại các phần còn lại để xử lý symbol có dấu gạch dưới
 
 	log.Printf("Thực hiện phân tích nâng cao cho symbol: %s", symbol)
-	log.Printf("Channel info - Title: %s, Username: %s, ID: %d",
-		callback.Message.Chat.Title,
-		callback.Message.Chat.UserName,
-		callback.Message.Chat.ID)
+	log.Printf("User info - ID: %d, Username: %s, FirstName: %s",
+		callback.From.ID,
+		callback.From.UserName,
+		callback.From.FirstName)
 
 	// Thực hiện phân tích OpenAI
 	openAIAnalysis, err := s.mlService.AnalyzeSymbolWithOpenAI(symbol)
@@ -418,20 +418,52 @@ func (s *TelegramBotService) handleAdvancedAnalysisCallback(callback *tgbotapi.C
 		openAIAnalysis = "❌ Không thể phân tích nâng cao do lỗi kỹ thuật"
 	}
 
-	// Tạo tin nhắn phân tích AI
-	analysisMessage := fmt.Sprintf("🤖 **Phân tích AI cho %s:**\n\n%s", symbol, openAIAnalysis)
+	// Tạo tin nhắn phân tích AI - escape các ký tự đặc biệt
+	escapedAnalysis := s.escapeTelegramText(openAIAnalysis)
+	analysisMessage := fmt.Sprintf("🤖 Phân tích AI cho %s:\n\n%s", symbol, escapedAnalysis)
 
-	// Gửi tin nhắn phân tích AI vào channel
-	msg := tgbotapi.NewMessageToChannel(callback.Message.Chat.UserName, analysisMessage)
-	msg.ParseMode = "Markdown"
-	msg.ReplyToMessageID = callback.Message.MessageID
+	// Gửi tin nhắn phân tích AI trực tiếp cho user đã nhấn button
+	msg := tgbotapi.NewMessage(callback.From.ID, analysisMessage)
+	// Không sử dụng ParseMode để tránh lỗi Markdown parsing
 
-	log.Printf("Gửi tin nhắn phân tích AI vào channel: %s", callback.Message.Chat.UserName)
+	log.Printf("Gửi tin nhắn phân tích AI cho user: %s (ID: %d)", callback.From.UserName, callback.From.ID)
 
 	_, err = s.bot.Send(msg)
 	if err != nil {
 		log.Printf("Lỗi khi gửi tin nhắn phân tích AI: %v", err)
 	} else {
-		log.Printf("✅ Đã gửi tin nhắn phân tích AI thành công")
+		log.Printf("✅ Đã gửi tin nhắn phân tích AI thành công cho user %s", callback.From.UserName)
 	}
+}
+
+// escapeTelegramText escape các ký tự đặc biệt trong Telegram
+func (s *TelegramBotService) escapeTelegramText(text string) string {
+	// Thay thế các ký tự đặc biệt có thể gây lỗi parsing
+	replacements := map[string]string{
+		"_": "\\_",
+		"*": "\\*",
+		"[": "\\[",
+		"]": "\\]",
+		"(": "\\(",
+		")": "\\)",
+		"~": "\\~",
+		"`": "\\`",
+		">": "\\>",
+		"#": "\\#",
+		"+": "\\+",
+		"-": "\\-",
+		"=": "\\=",
+		"|": "\\|",
+		"{": "\\{",
+		"}": "\\}",
+		".": "\\.",
+		"!": "\\!",
+	}
+
+	result := text
+	for old, new := range replacements {
+		result = strings.ReplaceAll(result, old, new)
+	}
+
+	return result
 }
