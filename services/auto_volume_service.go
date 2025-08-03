@@ -362,9 +362,6 @@ func (s *TechnicalAnalysisService) analyzeVolumeFromFloat64(volumes []float64) m
 		sum += volumes[i]
 	}
 	volumeSMA := sum / float64(models.VOLUME_SMA_PERIOD)
-	log.Println("volumes:", volumes)
-	log.Println("SUM:", sum)
-	log.Println("volumeSMA:", volumeSMA)
 	var volumeSignal, volumeStrength, confirmation string
 	confirmation = "null"
 	var volumeRatio decimal.Decimal
@@ -450,7 +447,6 @@ func detectBreakout(records []models.AutoVolumeRecord, averageCandlestickBody fl
 
 	// Tính resistance level (cao nhất của 5 nến trước nến hiện tại)
 	resistance := calculateResistance(records)
-	log.Println("resistance:", resistance, "symbols", record21.Symbol)
 
 	if record21.Candlestick() == 1 &&
 		record21.IsCandlestickBodyLong(averageCandlestickBody, 1.5) &&

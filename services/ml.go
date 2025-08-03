@@ -135,22 +135,22 @@ func (s *MLService) calculateIndicators(klines [][]interface{}) (string, string,
 	var smaData string
 	if len(prices) >= 20 {
 		smaValue := s.indicators.calculateSMA(prices[len(prices)-20:], 20)
-		smaData = fmt.Sprintf("%.2f", smaValue)
+		smaData = fmt.Sprintf("%.7f", smaValue)
 	} else {
 		smaData = "0.00"
 	}
 
 	// Tính EMA 9
 	ema9Value := s.indicators.CalculateEMA(prices, 9)
-	ema9Data := fmt.Sprintf("%.2f", ema9Value)
+	ema9Data := fmt.Sprintf("%.7f", ema9Value)
 
 	// Tính EMA 21
 	ema21Value := s.indicators.CalculateEMA(prices, 21)
-	ema21Data := fmt.Sprintf("%.2f", ema21Value)
+	ema21Data := fmt.Sprintf("%.7f", ema21Value)
 
 	// Tính EMA 50
 	ema50Value := s.indicators.CalculateEMA(prices, 50)
-	ema50Data := fmt.Sprintf("%.2f", ema50Value)
+	ema50Data := fmt.Sprintf("%.7f", ema50Value)
 
 	return rsiData, smaData, ema9Data, ema21Data, ema50Data, nil
 }
@@ -188,7 +188,7 @@ func (s *MLService) callOpenAIAPI(symbol, klineData, rsiData, smaData, ema9Data,
 
 	request := OpenAIRequest{}
 	request.Prompt.ID = "pmpt_688998fee2bc819491c6112cafd3cea1070efa35b2150e15"
-	request.Prompt.Version = "10"
+	request.Prompt.Version = "11"
 	request.Prompt.Variables = map[string]interface{}{
 		"symbol":     symbol,
 		"kline_data": klineData,
