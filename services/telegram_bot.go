@@ -451,12 +451,10 @@ func (s *TelegramBotService) escapeTelegramText(text string) string {
 		">": "\\>",
 		"#": "\\#",
 		"+": "\\+",
-		"-": "\\-",
 		"=": "\\=",
 		"|": "\\|",
 		"{": "\\{",
 		"}": "\\}",
-		".": "\\.",
 		"!": "\\!",
 	}
 
