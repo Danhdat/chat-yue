@@ -87,10 +87,11 @@ func (s *MLService) AnalyzeSymbolWithOpenAI(originalSymbol string) (string, erro
 	}
 
 	// Bước 3: Xử lý klines - chỉ lấy 30 nến gần nhất để giảm context
-	if len(klines) > 30 {
-		klines = klines[len(klines)-30:] // Lấy 30 nến cuối cùng
+	maxCandles := 30
+	if len(klines) > maxCandles {
+		klines = klines[len(klines)-maxCandles-1 : len(klines)-1] // Lấy chính xác 30 nến đã đóng
 	} else if len(klines) > 1 {
-		klines = klines[:len(klines)-1] // Loại bỏ nến cuối cùng (đang hình thành)
+		klines = klines[:len(klines)-1]
 	}
 
 	// Bước 4: Tính toán các indicators

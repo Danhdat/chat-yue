@@ -22,37 +22,44 @@ func NewTechnicalAnalysisService() *TechnicalAnalysisService {
 
 // CalculateRSI tính toán chỉ báo RSI (Relative Strength Index)
 func (s *TechnicalAnalysisService) CalculateRSI(prices []float64, period int) float64 {
-	if len(prices) < period+1 {
+	if len(prices) <= period {
 		return 0
 	}
 
-	gains := make([]float64, len(prices)-1)
-	losses := make([]float64, len(prices)-1)
-
-	// Tính gain và loss
-	for i := 1; i < len(prices); i++ {
+	// Bước 1: Tính biến động giá (Change) và Gain/Loss
+	var avgGain, avgLoss float64
+	for i := 1; i <= period; i++ {
 		change := prices[i] - prices[i-1]
 		if change > 0 {
-			gains[i-1] = change
-			losses[i-1] = 0
+			avgGain += change
 		} else {
-			gains[i-1] = 0
-			losses[i-1] = -change
+			avgLoss -= change
 		}
 	}
+	avgGain /= float64(period)
+	avgLoss /= float64(period)
 
-	// Tính trung bình gain và loss
-	avgGain := s.calculateSMA(gains[len(gains)-period:], period)
-	avgLoss := s.calculateSMA(losses[len(losses)-period:], period)
+	// Bước 2: Áp dụng Wilder's Smoothing cho các phiên sau
+	for i := period + 1; i < len(prices); i++ {
+		change := prices[i] - prices[i-1]
+		var currentGain, currentLoss float64
+		if change > 0 {
+			currentGain = change
+			currentLoss = 0
+		} else {
+			currentGain = 0
+			currentLoss = -change
+		}
+		avgGain = (avgGain*float64(period-1) + currentGain) / float64(period)
+		avgLoss = (avgLoss*float64(period-1) + currentLoss) / float64(period)
+	}
 
+	// Bước 3: Tính RSI
 	if avgLoss == 0 {
 		return 100
 	}
-
 	rs := avgGain / avgLoss
-	rsi := 100 - (100 / (1 + rs))
-
-	return rsi
+	return 100 - (100 / (1 + rs))
 }
 
 // CalculateEMA tính toán Exponential Moving Average

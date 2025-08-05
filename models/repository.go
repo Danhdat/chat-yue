@@ -161,7 +161,7 @@ func (r *SymbolRepository) SaveToDatabase(symbols []Symbol) error {
 	return nil
 }
 
-const updateInterval = 15 * 24 * time.Hour // 15 ngày
+const updateInterval = 1 * 24 * time.Hour // 1 ngày
 func (r *CommonRepository) ShouldUpdate(tableName string) bool {
 	var dataUpdate DataUpdate
 	err := r.db.Model(&DataUpdate{}).Where("table_name = ?", tableName).First(&dataUpdate).Error
