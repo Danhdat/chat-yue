@@ -162,7 +162,7 @@ func (s *MLService) formatKlineData(klines [][]interface{}) string {
 		// Format tối ưu: "index:close,volume" (chỉ lấy close price và volume)
 		line := fmt.Sprintf("%d:%s,%s,%s",
 			i+1,
-			kline[1], // open
+			kline[0], // open time
 			kline[4], // close
 			kline[7], // quote asset volume
 		)
