@@ -160,21 +160,13 @@ func (s *MLService) formatKlineData(klines [][]interface{}) string {
 	var result []string
 	for i, kline := range klines {
 		// Format tối ưu: "index:close,volume" (chỉ lấy close price và volume)
-		line := fmt.Sprintf("%d:%s,%s",
+		line := fmt.Sprintf("%d:%s,%s,%s",
 			i+1,
+			kline[1], // open
 			kline[4], // close
 			kline[7], // quote asset volume
 		)
 		result = append(result, line)
-	}
-	return strings.Join(result, ";")
-}
-
-// Format dữ liệu indicator
-func (s *MLService) formatIndicatorData(values []float64) string {
-	var result []string
-	for i, value := range values {
-		result = append(result, fmt.Sprintf("%d:%.4f", i+1, value))
 	}
 	return strings.Join(result, ";")
 }
@@ -188,7 +180,7 @@ func (s *MLService) callOpenAIAPI(symbol, klineData, rsiData, smaData, ema9Data,
 
 	request := OpenAIRequest{}
 	request.Prompt.ID = "pmpt_688998fee2bc819491c6112cafd3cea1070efa35b2150e15"
-	request.Prompt.Version = "11"
+	request.Prompt.Version = "12"
 	request.Prompt.Variables = map[string]interface{}{
 		"symbol":     symbol,
 		"kline_data": klineData,
