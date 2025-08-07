@@ -13,6 +13,8 @@ type ReportService struct {
 	volumeRepo          *models.AutoVolumeRecordRepository
 	symbolRepo          *models.SymbolRepository
 	notificationLogRepo *models.NotificationLogRepository
+	alphaRepo           *models.AlphaSymbolRepository
+	holderHistoryRepo   *models.HolderHistoryRepository
 	telegramBotService  *TelegramBotService
 }
 
@@ -21,6 +23,8 @@ func NewReportService(telegramBotService *TelegramBotService) *ReportService {
 		volumeRepo:          models.NewAutoVolumeRecordRepository(),
 		symbolRepo:          models.NewSymbolRepository(),
 		notificationLogRepo: models.NewNotificationLogRepository(),
+		alphaRepo:           models.NewAlphaSymbolRepository(),
+		holderHistoryRepo:   models.NewHolderHistoryRepository(),
 		telegramBotService:  telegramBotService,
 	}
 }

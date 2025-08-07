@@ -140,3 +140,18 @@ type NotificationLog struct {
 func (NotificationLog) TableName() string {
 	return "notification_logs"
 }
+
+// lưu lịch sử holders
+type HolderHistory struct {
+	ID           uint           `gorm:"primaryKey"`
+	Symbol       string         `gorm:"not null;index"`
+	Holders      int            `gorm:"not null"`
+	ChangeAmount float64        `gorm:"not null"`
+	CreatedAt    time.Time      `gorm:"not null"`
+	UpdatedAt    time.Time      `gorm:"not null"`
+	DeletedAt    gorm.DeletedAt `gorm:"index"`
+}
+
+func (HolderHistory) TableName() string {
+	return "holder_history"
+}

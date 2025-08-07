@@ -189,11 +189,59 @@ func (s *FetcherService) FetchAndUpdateAlpha() error {
 	// lưu dữ liệu vào database
 	if err := models.NewAlphaSymbolRepository().SaveToDatabaseAlpha(symbols); err != nil {
 		log.Printf("Lỗi khi lưu dữ liệu Alpha vào database: %v", err)
+		return err
 	}
+
+	// Lưu snapshot holders vào holder_history
+	if err := s.saveHoldersSnapshot(symbols); err != nil {
+		log.Printf("Lỗi khi lưu snapshot holders: %v", err)
+	}
+
 	// cập nhật thời gian cập nhật
 	if err := models.NewCommonRepository().UpdateLastUpdateTime("alpha_symbols"); err != nil {
 		log.Printf("Lỗi khi cập nhật thời gian cập nhật Alpha: %v", err)
 	}
+	return nil
+}
+
+// saveHoldersSnapshot lưu snapshot holders vào bảng holder_history
+func (s *FetcherService) saveHoldersSnapshot(symbols []models.AlphaSymbol) error {
+	holderRepo := models.NewHolderHistoryRepository()
+
+	for _, symbol := range symbols {
+		// Convert Holders từ string sang int
+		holdersCount := 0
+		if symbol.Holders != "" {
+			if _, err := fmt.Sscanf(symbol.Holders, "%d", &holdersCount); err != nil {
+				log.Printf("Lỗi convert holders cho symbol %s: %v", symbol.Symbol, err)
+				continue
+			}
+		}
+
+		// Lấy record cũ nhất để tính change_amount
+		latestHistory, err := holderRepo.GetLatestBySymbol(symbol.Symbol)
+		changeAmount := 0.0
+
+		if err == nil && latestHistory != nil {
+			// Có dữ liệu cũ, tính thay đổi
+			changeAmount = float64(holdersCount - latestHistory.Holders)
+		}
+
+		// Tạo record mới
+		history := &models.HolderHistory{
+			Symbol:       symbol.Symbol,
+			Holders:      holdersCount,
+			ChangeAmount: changeAmount,
+		}
+
+		// Lưu vào database
+		if err := holderRepo.Create(history); err != nil {
+			log.Printf("Lỗi lưu holder history cho symbol %s: %v", symbol.Symbol, err)
+			continue
+		}
+	}
+
+	log.Printf("Đã lưu snapshot holders cho %d symbols", len(symbols))
 	return nil
 }
 
@@ -219,18 +267,32 @@ func (s *SchedulerAlpha) Run() {
 	log.Println("Update completed")
 }
 func (s *SchedulerAlpha) Start() {
-	log.Println("Scheduler Alpha started")
-	// Chạy cập nhật đầu tiên
-	go s.Run()
+	// Hàm helper để tính thời gian đến giờ:30 tiếp theo (cách nhau 2 tiếng)
+	nextSchedule := func() time.Time {
+		now := time.Now()
+		// Tính giờ tiếp theo (làm tròn xuống giờ chẵn rồi cộng 2h30)
+		currentHour := now.Truncate(time.Hour) // Làm tròn xuống giờ (VD: 9:45 → 9:00)
+		// Thử cộng 2h30 vào giờ hiện tại
+		next := currentHour.Add(2*time.Hour + 30*time.Minute)
+		// Nếu thời gian này vẫn trong quá khứ (VD: now = 9:45, next = 11:30 → hợp lệ)
+		// Nhưng nếu now = 11:45, next = 13:30 → cần kiểm tra
+		if next.Before(now) {
+			// Nếu đã qua mốc, tính tiếp mốc sau (VD: 13:30 → 15:30)
+			next = next.Add(2 * time.Hour)
+		}
 
-	// Chạy cập nhật định kỳ mỗi 2 ngày
-	ticker := time.NewTicker(2 * 24 * time.Hour)
+		return next
+	}
+
+	// Tạo timer với thời gian đến lần chạy tiếp theo (VD: 9:30, 11:30,...)
+	ticker := time.NewTimer(time.Until(nextSchedule()))
 	defer ticker.Stop()
-
+	go s.Run()
 	for {
 		select {
 		case <-ticker.C:
 			go s.Run()
+			ticker.Reset(time.Until(nextSchedule()))
 		case <-s.stopChan:
 			log.Println("Scheduler Alpha stopped")
 			return

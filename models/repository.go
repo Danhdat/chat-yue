@@ -387,3 +387,76 @@ func (r *AlphaSymbolRepository) GetNameByAlphaSymbol(symbol string) (string, err
 	err := r.db.Where("alpha_id = ?", symbol).First(&alphaSymbol).Error
 	return alphaSymbol.Symbol, err
 }
+
+// HolderHistoryRepository xử lý thao tác với bảng holder_history
+type HolderHistoryRepository struct {
+	db *gorm.DB
+}
+
+func NewHolderHistoryRepository() *HolderHistoryRepository {
+	return &HolderHistoryRepository{db: DB}
+}
+
+// Create lưu lịch sử holders mới
+func (r *HolderHistoryRepository) Create(history *HolderHistory) error {
+	return r.db.Create(history).Error
+}
+
+// GetLatestBySymbol lấy record mới nhất của một symbol
+func (r *HolderHistoryRepository) GetLatestBySymbol(symbol string) (*HolderHistory, error) {
+	var history HolderHistory
+	err := r.db.Where("symbol = ?", symbol).Order("created_at DESC").First(&history).Error
+	if err != nil {
+		return nil, err
+	}
+	return &history, nil
+}
+
+// GetHistoryBySymbol lấy lịch sử holders của một symbol
+func (r *HolderHistoryRepository) GetHistoryBySymbol(symbol string, limit int) ([]HolderHistory, error) {
+	var histories []HolderHistory
+	err := r.db.Where("symbol = ?", symbol).Order("created_at DESC").Limit(limit).Find(&histories).Error
+	return histories, err
+}
+
+// GetHoldersChange lấy thay đổi holders (2 record gần nhất)
+func (r *HolderHistoryRepository) GetHoldersChange(symbol string) (*HolderHistory, *HolderHistory, error) {
+	var histories []HolderHistory
+	err := r.db.Where("symbol = ?", symbol).Order("created_at DESC").Limit(2).Find(&histories).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(histories) < 2 {
+		return nil, nil, fmt.Errorf("không đủ dữ liệu lịch sử cho symbol %s", symbol)
+	}
+
+	return &histories[0], &histories[1], nil
+}
+
+// GetTopHoldersGainers lấy top symbols tăng holders nhiều nhất
+func (r *HolderHistoryRepository) GetTopHoldersGainers(limit int) ([]HolderHistory, error) {
+	var histories []HolderHistory
+	err := r.db.Order("change_amount DESC").Limit(limit).Find(&histories).Error
+	return histories, err
+}
+
+// GetTopHoldersLosers lấy top symbols giảm holders nhiều nhất
+func (r *HolderHistoryRepository) GetTopHoldersLosers(limit int) ([]HolderHistory, error) {
+	var histories []HolderHistory
+	err := r.db.Order("change_amount ASC").Limit(limit).Find(&histories).Error
+	return histories, err
+}
+
+// GetHoldersTrend lấy xu hướng holders của một symbol
+func (r *HolderHistoryRepository) GetHoldersTrend(symbol string, days int) ([]HolderHistory, error) {
+	var histories []HolderHistory
+	err := r.db.Where("symbol = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)", symbol, days).
+		Order("created_at ASC").Find(&histories).Error
+	return histories, err
+}
+
+// DeleteOldHistory xóa lịch sử cũ
+func (r *HolderHistoryRepository) DeleteOldHistory(olderThan time.Time) error {
+	return r.db.Where("created_at < ?", olderThan).Delete(&HolderHistory{}).Error
+}
