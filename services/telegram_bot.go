@@ -346,8 +346,6 @@ func (s *TelegramBotService) SendTelegramToChannel(channelID, message string) {
 
 // SendTelegramToChannelWithAdvancedButton gửi tin nhắn đến channel với button phân tích nâng cao
 func (s *TelegramBotService) SendTelegramToChannelWithAdvancedButton(channelID, message string, symbol string) {
-	log.Println("Sending message with advanced analysis button to channel: ", channelID)
-
 	msg := tgbotapi.NewMessageToChannel(channelID, message)
 	msg.ParseMode = "Markdown"
 

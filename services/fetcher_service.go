@@ -175,10 +175,10 @@ func (s *FetcherService) fetchAlphaFromAPI() ([]models.AlphaSymbol, error) {
 
 func (s *FetcherService) FetchAndUpdateAlpha() error {
 	// kiểm tra cập nhật
-	if !models.NewCommonRepository().ShouldUpdate("alpha_symbols") {
+	/*if !models.NewCommonRepository().ShouldUpdate("alpha_symbols") {
 		logrus.Info("Dữ liệu Alpha đã được cập nhật, bỏ qua việc lấy dữ liệu mới")
 		return nil
-	}
+	}*/
 
 	// lấy dữ liệu mới
 	symbols, err := s.fetchAlphaFromAPI()

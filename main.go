@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -70,13 +72,13 @@ func main() {
 
 	// Khởi động bot trong goroutine
 	go func() {
-		log.Println("✅ Bot đã sẵn sàng nhận tin nhắn...")
+		logrus.Info("✅ Bot đã sẵn sàng nhận tin nhắn...")
 		botService.StartBot()
 	}()
 
 	// Chờ tín hiệu dừng
 	<-stopChan
-	log.Println("🛑 Đang dừng bot...")
+	logrus.Info("🛑 Đang dừng bot...")
 	// Gọi Stop cho các service nếu có
 	scheduler.Stop()
 	schedulerAlpha.Stop()
@@ -85,7 +87,7 @@ func main() {
 	scheduler4.Stop()
 	scheduler5.Stop()
 	time.Sleep(2 * time.Second)
-	log.Println("🛑 Bot đã dừng")
+	logrus.Info("🛑 Bot đã dừng")
 
 }
 
