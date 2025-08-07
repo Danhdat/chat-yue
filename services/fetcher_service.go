@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -209,13 +211,38 @@ func (s *FetcherService) saveHoldersSnapshot(symbols []models.AlphaSymbol) error
 	holderRepo := models.NewHolderHistoryRepository()
 
 	for _, symbol := range symbols {
+		// Debug: Log dữ liệu raw từ API
+		log.Printf("DEBUG: Symbol %s - Raw Holders: '%s'", symbol.Symbol, symbol.Holders)
+
 		// Convert Holders từ string sang int
 		holdersCount := 0
 		if symbol.Holders != "" {
-			if _, err := fmt.Sscanf(symbol.Holders, "%d", &holdersCount); err != nil {
-				log.Printf("Lỗi convert holders cho symbol %s: %v", symbol.Symbol, err)
-				continue
+			// Loại bỏ các ký tự không phải số
+			cleanHolders := strings.TrimSpace(symbol.Holders)
+			// Loại bỏ dấu phẩy, chấm nếu có
+			cleanHolders = strings.ReplaceAll(cleanHolders, ",", "")
+			cleanHolders = strings.ReplaceAll(cleanHolders, ".", "")
+
+			// Thử parse với strconv.Atoi
+			if count, err := strconv.Atoi(cleanHolders); err == nil {
+				holdersCount = count
+			} else {
+				// Nếu không được, thử với fmt.Sscanf
+				if _, err := fmt.Sscanf(cleanHolders, "%d", &holdersCount); err != nil {
+					log.Printf("Lỗi convert holders cho symbol %s: '%s' (cleaned: '%s') - %v",
+						symbol.Symbol, symbol.Holders, cleanHolders, err)
+					continue
+				}
 			}
+		}
+
+		// Debug: Log số đã convert
+		log.Printf("DEBUG: Symbol %s - Converted Holders: %d", symbol.Symbol, holdersCount)
+
+		// Kiểm tra dữ liệu hợp lý (holders không quá lớn)
+		if holdersCount > 1000000 {
+			log.Printf("WARNING: Symbol %s có holders quá lớn (%d), có thể lỗi dữ liệu", symbol.Symbol, holdersCount)
+			continue
 		}
 
 		// Lấy record cũ nhất để tính change_amount
@@ -225,6 +252,10 @@ func (s *FetcherService) saveHoldersSnapshot(symbols []models.AlphaSymbol) error
 		if err == nil && latestHistory != nil {
 			// Có dữ liệu cũ, tính thay đổi
 			changeAmount = float64(holdersCount - latestHistory.Holders)
+			log.Printf("DEBUG: Symbol %s - Previous: %d, Current: %d, Change: %.0f",
+				symbol.Symbol, latestHistory.Holders, holdersCount, changeAmount)
+		} else {
+			log.Printf("DEBUG: Symbol %s - First time, no previous data", symbol.Symbol)
 		}
 
 		// Tạo record mới
