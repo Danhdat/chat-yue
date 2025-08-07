@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
+	"github.com/sirupsen/logrus"
 )
 
 type AutoVolumeService struct {
@@ -212,7 +212,7 @@ func (s *AutoVolumeService) AnalyzeAndNotifyVolumes(channelID string) error {
 	}
 	symbols := append(reSymbols, alphaSymbols...)
 
-	log.Println("Analyzing volumes for ", len(symbols), "symbols")
+	logrus.Infof("Analyzing volumes for %d symbols", len(symbols))
 	taService := NewTechnicalAnalysisService()
 
 	// Map để theo dõi symbols đã xử lý để tránh trùng lặp
@@ -704,7 +704,7 @@ func NewScheduler2(autoVolumeService *AutoVolumeService) *Scheduler2 {
 }
 
 func (s *Scheduler2) Start() {
-	log.Println("Scheduler Volume started")
+	logrus.Info("Scheduler Volume started")
 	// Hàm helper để tính thời gian đến giờ tiếp theo
 	nextHour := func() time.Time {
 		now := time.Now()
@@ -721,7 +721,7 @@ func (s *Scheduler2) Start() {
 			// Đặt lại timer cho giờ tiếp theo
 			timer.Reset(time.Until(nextHour()))
 		case <-s.stopChan:
-			log.Println("Scheduler stopped")
+			logrus.Info("Scheduler stopped")
 			return
 		}
 	}
@@ -732,11 +732,11 @@ func (s *Scheduler2) Stop() {
 }
 
 func (s *Scheduler2) Run() {
-	log.Println("Running update")
+	logrus.Info("Running update")
 	if err := s.autoVolumeService.FetchAndSaveAllSymbolsVolume(); err != nil {
-		log.Printf("Lỗi khi cập nhật dữ liệu: %v", err)
+		logrus.Errorf("Lỗi khi cập nhật dữ liệu: %v", err)
 	}
-	log.Println("Update completed")
+	logrus.Info("Update completed")
 
 }
 
@@ -772,7 +772,7 @@ func (s *Scheduler3) Start() {
 			go s.Run()
 			timer.Reset(time.Until(nextSchedule()))
 		case <-s.stopChan:
-			log.Println("Scheduler stopped")
+			logrus.Info("Scheduler stopped")
 			return
 		}
 	}
@@ -780,9 +780,9 @@ func (s *Scheduler3) Start() {
 
 func (s *Scheduler3) Run() {
 	if err := s.autoVolumeService.AnalyzeAndNotifyVolumes(s.channelID); err != nil {
-		log.Printf("Lỗi khi phân tích và gửi cảnh báo: %v", err)
+		logrus.Errorf("Lỗi khi phân tích và gửi cảnh báo: %v", err)
 	}
-	log.Println("Analyze and notify completed")
+	logrus.Info("Analyze and notify completed")
 }
 func (s *Scheduler3) Stop() {
 	s.stopChan <- true

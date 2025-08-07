@@ -3,10 +3,11 @@ package services
 import (
 	"chatbtc/models"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type ReportService struct {
@@ -138,9 +139,9 @@ func NewScheduler4(reportService *ReportService, channelID string) *Scheduler4 {
 
 func (s *Scheduler4) Run() {
 	if err := s.reportService.ReportTop10SymbolsThisWeek(s.channelID); err != nil {
-		log.Printf("Lỗi khi gửi báo cáo: %v", err)
+		logrus.Errorf("Lỗi khi gửi báo cáo: %v", err)
 	}
-	log.Println("Report completed")
+	logrus.Info("Report completed")
 }
 func (s *Scheduler4) Stop() {
 	s.stopChan <- true
@@ -189,7 +190,7 @@ func (s *Scheduler4) Start() {
 			go s.Run()
 			timer.Reset(time.Until(nextSchedule()))
 		case <-s.stopChan:
-			log.Println("Scheduler stopped")
+			logrus.Info("Scheduler stopped")
 			return
 		}
 	}
@@ -209,9 +210,9 @@ func NewScheduler5(reportService *ReportService) *Scheduler5 {
 
 func (s *Scheduler5) Run() {
 	if err := s.reportService.notificationLogRepo.DeleteLogMonth(); err != nil {
-		log.Printf("Lỗi khi xóa log tháng: %v", err)
+		logrus.Errorf("Lỗi khi xóa log tháng: %v", err)
 	}
-	log.Println("Xóa log tháng thành công")
+	logrus.Info("Xóa log tháng thành công")
 }
 func (s *Scheduler5) Stop() {
 	s.stopChan <- true
@@ -247,7 +248,7 @@ func (s *Scheduler5) Start() {
 			go s.Run()
 			timer.Reset(time.Until(nextSchedule()))
 		case <-s.stopChan:
-			log.Println("Scheduler stopped")
+			logrus.Info("Scheduler stopped")
 			return
 		}
 	}

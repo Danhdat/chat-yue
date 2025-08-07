@@ -4,9 +4,10 @@ import (
 	"chatbtc/models"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 const binanceAPIURL = "https://api.binance.com/api/v3/exchangeInfo"
@@ -24,24 +25,24 @@ func NewFetcherService() *FetcherService {
 func (s *FetcherService) FetchAndUpdateSymbols() error {
 	// kiểm tra cập nhật
 	if !models.NewCommonRepository().ShouldUpdate("symbols") {
-		log.Println("Dữ liệu đã được cập nhật, bỏ qua việc lấy dữ liệu mới")
+		logrus.Info("Dữ liệu đã được cập nhật, bỏ qua việc lấy dữ liệu mới")
 		return nil
 	}
 
 	// lấy dữ liệu mới
 	symbols, err := s.fetchFromAPI()
 	if err != nil {
-		log.Printf("Lỗi khi lấy dữ liệu từ Binance API: %v", err)
+		logrus.Errorf("Lỗi khi lấy dữ liệu từ Binance API: %v", err)
 		return err
 	}
 
 	// lưu dữ liệu vào database
 	if err := models.NewSymbolRepository().SaveToDatabase(symbols); err != nil {
-		log.Printf("Lỗi khi lưu dữ liệu vào database: %v", err)
+		logrus.Errorf("Lỗi khi lưu dữ liệu vào database: %v", err)
 	}
 	// cập nhật thời gian cập nhật
 	if err := models.NewCommonRepository().UpdateLastUpdateTime("symbols"); err != nil {
-		log.Printf("Lỗi khi cập nhật thời gian cập nhật: %v", err)
+		logrus.Errorf("Lỗi khi cập nhật thời gian cập nhật: %v", err)
 	}
 	return nil
 }
@@ -92,7 +93,7 @@ func NewScheduler(fetchService *FetcherService) *Scheduler {
 }
 
 func (s *Scheduler) Start() {
-	log.Println("Scheduler started")
+	logrus.Info("Scheduler started")
 	// Chạy cập nhật đầu tiên
 
 	// Chạy cập nhật định kỳ mỗi 15 ngày
@@ -104,18 +105,18 @@ func (s *Scheduler) Start() {
 		case <-ticker.C:
 			go s.runUpdate()
 		case <-s.stopChan:
-			log.Println("Scheduler stopped")
+			logrus.Info("Scheduler stopped")
 			return
 		}
 	}
 }
 
 func (s *Scheduler) runUpdate() {
-	log.Println("Running update")
+	logrus.Info("Running update")
 	if err := s.fetchService.FetchAndUpdateSymbols(); err != nil {
-		log.Printf("Lỗi khi cập nhật dữ liệu: %v", err)
+		logrus.Errorf("Lỗi khi cập nhật dữ liệu: %v", err)
 	}
-	log.Println("Update completed")
+	logrus.Info("Update completed")
 }
 
 func (s *Scheduler) Stop() {
@@ -175,45 +176,52 @@ func (s *FetcherService) fetchAlphaFromAPI() ([]models.AlphaSymbol, error) {
 func (s *FetcherService) FetchAndUpdateAlpha() error {
 	// kiểm tra cập nhật
 	if !models.NewCommonRepository().ShouldUpdate("alpha_symbols") {
-		log.Println("Dữ liệu Alpha đã được cập nhật, bỏ qua việc lấy dữ liệu mới")
+		logrus.Info("Dữ liệu Alpha đã được cập nhật, bỏ qua việc lấy dữ liệu mới")
 		return nil
 	}
 
 	// lấy dữ liệu mới
 	symbols, err := s.fetchAlphaFromAPI()
 	if err != nil {
-		log.Printf("Lỗi khi lấy dữ liệu từ Binance API Alpha: %v", err)
+		logrus.Errorf("Lỗi khi lấy dữ liệu từ Binance API Alpha: %v", err)
 		return err
 	}
 
 	// lưu dữ liệu vào database
 	if err := models.NewAlphaSymbolRepository().SaveToDatabaseAlpha(symbols); err != nil {
-		log.Printf("Lỗi khi lưu dữ liệu Alpha vào database: %v", err)
+		logrus.Errorf("Lỗi khi lưu dữ liệu Alpha vào database: %v", err)
 		return err
 	}
 
 	// Lưu snapshot holders vào holder_history
+	logrus.Infof("Bắt đầu lưu snapshot holders cho %d symbols", len(symbols))
 	if err := s.saveHoldersSnapshot(symbols); err != nil {
-		log.Printf("Lỗi khi lưu snapshot holders: %v", err)
+		logrus.Errorf("Lỗi khi lưu snapshot holders: %v", err)
+	} else {
+		logrus.Info("Hoàn thành lưu snapshot holders")
 	}
 
 	// cập nhật thời gian cập nhật
 	if err := models.NewCommonRepository().UpdateLastUpdateTime("alpha_symbols"); err != nil {
-		log.Printf("Lỗi khi cập nhật thời gian cập nhật Alpha: %v", err)
+		logrus.Errorf("Lỗi khi cập nhật thời gian cập nhật Alpha: %v", err)
 	}
 	return nil
 }
 
 // saveHoldersSnapshot lưu snapshot holders vào bảng holder_history
 func (s *FetcherService) saveHoldersSnapshot(symbols []models.AlphaSymbol) error {
+	logrus.Infof("DEBUG: Bắt đầu saveHoldersSnapshot với %d symbols", len(symbols))
 	holderRepo := models.NewHolderHistoryRepository()
 
-	for _, symbol := range symbols {
+	for i, symbol := range symbols {
+		if i%100 == 0 { // Log mỗi 100 symbols
+			logrus.Infof("DEBUG: Đang xử lý symbol thứ %d/%d", i+1, len(symbols))
+		}
 		// Convert Holders từ string sang int
 		holdersCount := 0
 		if symbol.Holders != "" {
 			if _, err := fmt.Sscanf(symbol.Holders, "%d", &holdersCount); err != nil {
-				log.Printf("Lỗi convert holders cho symbol %s: %v", symbol.Symbol, err)
+				logrus.Errorf("Lỗi convert holders cho symbol %s: %v", symbol.Symbol, err)
 				continue
 			}
 		}
@@ -236,12 +244,12 @@ func (s *FetcherService) saveHoldersSnapshot(symbols []models.AlphaSymbol) error
 
 		// Lưu vào database
 		if err := holderRepo.Create(history); err != nil {
-			log.Printf("Lỗi lưu holder history cho symbol %s: %v", symbol.Symbol, err)
+			logrus.Errorf("Lỗi lưu holder history cho symbol %s: %v", symbol.Symbol, err)
 			continue
 		}
 	}
 
-	log.Printf("Đã lưu snapshot holders cho %d symbols", len(symbols))
+	logrus.Infof("Đã lưu snapshot holders cho %d symbols", len(symbols))
 	return nil
 }
 
@@ -260,11 +268,11 @@ func (s *SchedulerAlpha) Stop() {
 	s.stopChan <- true
 }
 func (s *SchedulerAlpha) Run() {
-	log.Println("Running Alpha update")
+	logrus.Info("Running Alpha update")
 	if err := s.fetchService.FetchAndUpdateAlpha(); err != nil {
-		log.Printf("Lỗi khi cập nhật dữ liệu: %v", err)
+		logrus.Errorf("Lỗi khi cập nhật dữ liệu: %v", err)
 	}
-	log.Println("Update completed")
+	logrus.Info("Update completed")
 }
 func (s *SchedulerAlpha) Start() {
 	// Hàm helper để tính thời gian đến giờ:30 tiếp theo (cách nhau 2 tiếng)
@@ -287,13 +295,17 @@ func (s *SchedulerAlpha) Start() {
 	// Tạo timer với thời gian đến lần chạy tiếp theo (VD: 9:30, 11:30,...)
 	ticker := time.NewTimer(time.Until(nextSchedule()))
 	defer ticker.Stop()
+
+	// Chạy lần đầu ngay lập tức
+	go s.Run()
+
 	for {
 		select {
 		case <-ticker.C:
 			go s.Run()
 			ticker.Reset(time.Until(nextSchedule()))
 		case <-s.stopChan:
-			log.Println("Scheduler Alpha stopped")
+			logrus.Info("Scheduler Alpha stopped")
 			return
 		}
 	}
