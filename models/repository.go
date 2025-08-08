@@ -466,35 +466,6 @@ func (r *HolderHistoryRepository) GetHistoryBySymbol(symbol string, limit int) (
 	return histories, err
 }
 
-// GetHoldersChange lấy thay đổi holders (2 record gần nhất)
-func (r *HolderHistoryRepository) GetHoldersChange(symbol string) (*HolderHistory, *HolderHistory, error) {
-	var histories []HolderHistory
-	err := r.db.Where("symbol = ?", symbol).Order("created_at DESC").Limit(2).Find(&histories).Error
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if len(histories) < 2 {
-		return nil, nil, fmt.Errorf("không đủ dữ liệu lịch sử cho symbol %s", symbol)
-	}
-
-	return &histories[0], &histories[1], nil
-}
-
-// GetTopHoldersGainers lấy top symbols tăng holders nhiều nhất
-func (r *HolderHistoryRepository) GetTopHoldersGainers(limit int) ([]HolderHistory, error) {
-	var histories []HolderHistory
-	err := r.db.Order("change_amount DESC").Limit(limit).Find(&histories).Error
-	return histories, err
-}
-
-// GetTopHoldersLosers lấy top symbols giảm holders nhiều nhất
-func (r *HolderHistoryRepository) GetTopHoldersLosers(limit int) ([]HolderHistory, error) {
-	var histories []HolderHistory
-	err := r.db.Order("change_amount ASC").Limit(limit).Find(&histories).Error
-	return histories, err
-}
-
 // GetHoldersTrend lấy xu hướng holders của một symbol
 func (r *HolderHistoryRepository) GetHoldersTrend(symbol string, days int) ([]HolderHistory, error) {
 	var histories []HolderHistory
@@ -503,7 +474,19 @@ func (r *HolderHistoryRepository) GetHoldersTrend(symbol string, days int) ([]Ho
 	return histories, err
 }
 
-// DeleteOldHistory xóa lịch sử cũ
-func (r *HolderHistoryRepository) DeleteOldHistory(olderThan time.Time) error {
-	return r.db.Where("created_at < ?", olderThan).Delete(&HolderHistory{}).Error
+// DeleteOldHistory xóa lịch sử cũ hơn 1 tháng
+func (r *HolderHistoryRepository) DeleteOldHistoryMonth() error {
+	return r.db.Where("created_at < ?", time.Now().AddDate(0, -1, 0)).Delete(&HolderHistory{}).Error
+}
+
+// Lấy toàn bộ HolderHistory trong tuần hiện tại
+func (r *HolderHistoryRepository) GetAllHolderHistoryThisWeek() ([]HolderHistory, error) {
+	loc := time.FixedZone("UTC+7", 7*60*60)
+	now := time.Now().In(loc)
+	year, week := now.ISOWeek()
+	startOfWeek := firstDayOfISOWeek(year, week, loc)
+	endOfWeek := startOfWeek.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	var histories []HolderHistory
+	err := r.db.Where("created_at >= ? AND created_at <= ?", startOfWeek, endOfWeek).Find(&histories).Error
+	return histories, err
 }

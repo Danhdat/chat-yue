@@ -139,7 +139,10 @@ func NewScheduler4(reportService *ReportService, channelID string) *Scheduler4 {
 
 func (s *Scheduler4) Run() {
 	if err := s.reportService.ReportTop10SymbolsThisWeek(s.channelID); err != nil {
-		logrus.Errorf("Lỗi khi gửi báo cáo: %v", err)
+		logrus.Errorf("Lỗi khi gửi báo cáo top hiển thị: %v", err)
+	}
+	if err := s.reportService.ReportTop10SymbolsThisWeekHolder(s.channelID); err != nil {
+		logrus.Errorf("Lỗi khi gửi báo cáo top holders: %v", err)
 	}
 	logrus.Info("Report completed")
 }
@@ -212,6 +215,9 @@ func (s *Scheduler5) Run() {
 	if err := s.reportService.notificationLogRepo.DeleteLogMonth(); err != nil {
 		logrus.Errorf("Lỗi khi xóa log tháng: %v", err)
 	}
+	if err := s.reportService.holderHistoryRepo.DeleteOldHistoryMonth(); err != nil {
+		logrus.Errorf("Lỗi khi xóa holder history tháng: %v", err)
+	}
 	logrus.Info("Xóa log tháng thành công")
 }
 func (s *Scheduler5) Stop() {
@@ -252,4 +258,119 @@ func (s *Scheduler5) Start() {
 			return
 		}
 	}
+}
+
+// Báo cáo top 10 symbol holder trong tuần và gửi lên Telegram
+// Bao gồm top 10 symbol tăng holders nhiều nhất và top 10 symbol giảm holders nhiều nhất trong 7 ngày
+func (s *ReportService) ReportTop10SymbolsThisWeekHolder(channelID string) error {
+	// Lấy tất cả records trong tuần hiện tại
+	allHistories, err := s.holderHistoryRepo.GetAllHolderHistoryThisWeek()
+	if err != nil {
+		logrus.Errorf("Lỗi lấy holder history: %v", err)
+		return err
+	}
+
+	// Tạo map để tổng hợp thay đổi theo symbol
+	symbolChanges := make(map[string]float64)
+	symbolLatestHolders := make(map[string]int)
+	symbolInitialHolders := make(map[string]int)
+
+	for _, history := range allHistories {
+		symbolChanges[history.Symbol] += history.ChangeAmount
+
+		// Lưu holders mới nhất của mỗi symbol
+		if _, exists := symbolLatestHolders[history.Symbol]; !exists {
+			symbolLatestHolders[history.Symbol] = history.Holders
+		}
+
+		// Lưu holders ban đầu (record cũ nhất) của mỗi symbol
+		symbolInitialHolders[history.Symbol] = history.Holders
+	}
+
+	// Tách thành gainers và losers
+	var gainers []struct {
+		Symbol         string
+		Change         float64
+		LatestHolders  int
+		InitialHolders int
+	}
+	var losers []struct {
+		Symbol         string
+		Change         float64
+		LatestHolders  int
+		InitialHolders int
+	}
+
+	for symbol, change := range symbolChanges {
+		if change > 0 {
+			gainers = append(gainers, struct {
+				Symbol         string
+				Change         float64
+				LatestHolders  int
+				InitialHolders int
+			}{symbol, change, symbolLatestHolders[symbol], symbolInitialHolders[symbol]})
+		} else if change < 0 {
+			losers = append(losers, struct {
+				Symbol         string
+				Change         float64
+				LatestHolders  int
+				InitialHolders int
+			}{symbol, change, symbolLatestHolders[symbol], symbolInitialHolders[symbol]})
+		}
+	}
+
+	// Sắp xếp gainers và losers
+	sort.Slice(gainers, func(i, j int) bool {
+		return gainers[i].Change > gainers[j].Change
+	})
+	sort.Slice(losers, func(i, j int) bool {
+		return losers[i].Change < losers[j].Change
+	})
+
+	// Tạo báo cáo
+	var builder strings.Builder
+	builder.WriteString("📊 *Top 10 Holders thay đổi tuần này*\n\n")
+
+	// Top Gainers
+	builder.WriteString("🚀 *Top 10 tăng Holders*\n")
+	for i, item := range gainers {
+		if i >= 10 {
+			break
+		}
+		changePercent := 0.0
+		if item.InitialHolders > 0 {
+			changePercent = (item.Change / float64(item.InitialHolders)) * 100
+		}
+		builder.WriteString(fmt.Sprintf("%d. %s: +%.0f (%.1f%%)\n",
+			i+1,
+			item.Symbol,
+			item.Change,
+			changePercent))
+	}
+
+	// Top Losers
+	builder.WriteString("\n📉 *Top 10 giảm Holders*\n")
+	for i, item := range losers {
+		if i >= 10 {
+			break
+		}
+		changePercent := 0.0
+		if item.InitialHolders > 0 {
+			changePercent = (item.Change / float64(item.InitialHolders)) * 100
+		}
+		builder.WriteString(fmt.Sprintf("%d. %s: %.0f (%.1f%%)\n",
+			i+1,
+			item.Symbol,
+			item.Change,
+			changePercent))
+	}
+
+	// Thêm thống kê tổng quan
+	builder.WriteString("\n📈 *Tổng quan:*\n")
+	builder.WriteString(fmt.Sprintf("• Symbols tăng holders: %d\n", len(gainers)))
+	builder.WriteString(fmt.Sprintf("• Symbols giảm holders: %d\n", len(losers)))
+
+	// Gửi báo cáo
+	s.telegramBotService.SendTelegramToChannel(channelID, builder.String())
+	return nil
 }

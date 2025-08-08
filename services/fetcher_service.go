@@ -210,13 +210,9 @@ func (s *FetcherService) FetchAndUpdateAlpha() error {
 
 // saveHoldersSnapshot lưu snapshot holders vào bảng holder_history
 func (s *FetcherService) saveHoldersSnapshot(symbols []models.AlphaSymbol) error {
-	logrus.Infof("DEBUG: Bắt đầu saveHoldersSnapshot với %d symbols", len(symbols))
 	holderRepo := models.NewHolderHistoryRepository()
 
-	for i, symbol := range symbols {
-		if i%100 == 0 { // Log mỗi 100 symbols
-			logrus.Infof("DEBUG: Đang xử lý symbol thứ %d/%d", i+1, len(symbols))
-		}
+	for _, symbol := range symbols {
 		// Convert Holders từ string sang int
 		holdersCount := 0
 		if symbol.Holders != "" {
@@ -226,7 +222,7 @@ func (s *FetcherService) saveHoldersSnapshot(symbols []models.AlphaSymbol) error
 			}
 		}
 
-		// Lấy record cũ nhất để tính change_amount
+		// Lấy record mới nhất để tính change_amount
 		latestHistory, err := holderRepo.GetLatestBySymbol(symbol.Symbol)
 		changeAmount := 0.0
 
