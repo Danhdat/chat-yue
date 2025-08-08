@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -227,10 +228,13 @@ func NewNotificationLogRepository() *NotificationLogRepository {
 	return &NotificationLogRepository{db: DB}
 }
 
-// Create lưu log thông báo mới - Tối ưu hóa cực đoan
+// Create lưu log thông báo mới - Tối ưu hóa cho Railway
 func (r *NotificationLogRepository) Create(log *NotificationLog) error {
-	// Sử dụng raw SQL để tránh GORM overhead
-	return r.db.Exec("INSERT INTO notification_logs (symbol, created_at, direction, type) VALUES (?, ?, ?, ?)",
+	// Sử dụng raw SQL với timeout để tránh GORM overhead và network issues
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	return r.db.WithContext(ctx).Exec("INSERT INTO notification_logs (symbol, created_at, direction, type) VALUES ($1, $2, $3, $4)",
 		log.Symbol, log.CreatedAt, log.Direction, log.Type).Error
 }
 
@@ -256,14 +260,23 @@ func (r *NotificationLogRepository) CreateBatch(logs []*NotificationLog) error {
 	return nil
 }
 
-// CreateAsync lưu log thông báo bất đồng bộ - Tối ưu hóa cho performance
+// CreateAsync lưu log thông báo bất đồng bộ - Tối ưu hóa cho Railway
 func (r *NotificationLogRepository) CreateAsync(log *NotificationLog) {
 	go func() {
-		if err := r.Create(log); err != nil {
-			// Log error nhưng không block main thread
-			// Sử dụng fmt.Printf thay vì log.Printf để tránh conflict với parameter name
-			fmt.Printf("Lỗi lưu log thông báo bất đồng bộ: %v\n", err)
+		// Retry logic cho Railway
+		maxRetries := 3
+		for i := 0; i < maxRetries; i++ {
+			if err := r.Create(log); err == nil {
+				return // Thành công
+			} else {
+				// Log error và retry
+				fmt.Printf("Lỗi lưu log thông báo bất đồng bộ (lần %d): %v\n", i+1, err)
+				if i < maxRetries-1 {
+					time.Sleep(time.Duration(i+1) * 100 * time.Millisecond) // Exponential backoff
+				}
+			}
 		}
+		fmt.Printf("Không thể lưu log thông báo sau %d lần thử\n", maxRetries)
 	}()
 }
 
