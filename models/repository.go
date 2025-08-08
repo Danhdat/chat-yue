@@ -227,10 +227,11 @@ func NewNotificationLogRepository() *NotificationLogRepository {
 	return &NotificationLogRepository{db: DB}
 }
 
-// Create lưu log thông báo mới - Tối ưu hóa
+// Create lưu log thông báo mới - Tối ưu hóa cực đoan
 func (r *NotificationLogRepository) Create(log *NotificationLog) error {
-	// Sử dụng Select để chỉ insert các field cần thiết
-	return r.db.Select("symbol", "created_at", "direction", "type").Create(log).Error
+	// Sử dụng raw SQL để tránh GORM overhead
+	return r.db.Exec("INSERT INTO notification_logs (symbol, created_at, direction, type) VALUES (?, ?, ?, ?)",
+		log.Symbol, log.CreatedAt, log.Direction, log.Type).Error
 }
 
 // CreateBatch lưu nhiều log thông báo cùng lúc - Tối ưu hóa cho batch insert
@@ -397,9 +398,42 @@ func NewHolderHistoryRepository() *HolderHistoryRepository {
 	return &HolderHistoryRepository{db: DB}
 }
 
-// Create lưu lịch sử holders mới
+// Create lưu lịch sử holders mới - Tối ưu hóa
 func (r *HolderHistoryRepository) Create(history *HolderHistory) error {
-	return r.db.Create(history).Error
+	// Sử dụng Select để chỉ insert các field cần thiết
+	return r.db.Select("symbol", "holders", "change_amount", "created_at", "updated_at").Create(history).Error
+}
+
+// CreateBatch lưu nhiều holder history cùng lúc - Tối ưu hóa cho batch insert
+func (r *HolderHistoryRepository) CreateBatch(histories []*HolderHistory) error {
+	if len(histories) == 0 {
+		return nil
+	}
+
+	// Sử dụng batch insert với size 100
+	batchSize := 100
+	for i := 0; i < len(histories); i += batchSize {
+		end := i + batchSize
+		if end > len(histories) {
+			end = len(histories)
+		}
+
+		batch := histories[i:end]
+		if err := r.db.Select("symbol", "holders", "change_amount", "created_at", "updated_at").CreateInBatches(batch, len(batch)).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CreateAsync lưu holder history bất đồng bộ - Tối ưu hóa cho performance
+func (r *HolderHistoryRepository) CreateAsync(history *HolderHistory) {
+	go func() {
+		if err := r.Create(history); err != nil {
+			// Log error nhưng không block main thread
+			fmt.Printf("Lỗi lưu holder history bất đồng bộ: %v\n", err)
+		}
+	}()
 }
 
 // GetLatestBySymbol lấy record mới nhất của một symbol

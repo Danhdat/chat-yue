@@ -42,17 +42,17 @@ func InitDatabase() error {
 		return fmt.Errorf("không thể kết nối database: %v", err)
 	}
 
-	// Cấu hình connection pool - Tối ưu hóa cho high performance
+	// Cấu hình connection pool - Tối ưu hóa cực đoan cho high performance
 	sqlDB, err := DB.DB()
 	if err != nil {
 		return fmt.Errorf("không thể lấy connection pool: %v", err)
 	}
 
-	// Cấu hình connection pool tối ưu
-	sqlDB.SetMaxIdleConns(20)  // Tăng số connection idle
-	sqlDB.SetMaxOpenConns(200) // Tăng số connection tối đa
-	sqlDB.SetConnMaxLifetime(time.Hour)
-	sqlDB.SetConnMaxIdleTime(30 * time.Minute) // Giảm thời gian idle
+	// Cấu hình connection pool tối ưu cực đoan
+	sqlDB.SetMaxIdleConns(50)                  // Tăng cao số connection idle
+	sqlDB.SetMaxOpenConns(500)                 // Tăng cao số connection tối đa
+	sqlDB.SetConnMaxLifetime(30 * time.Minute) // Giảm thời gian connection
+	sqlDB.SetConnMaxIdleTime(10 * time.Minute) // Giảm thời gian idle
 
 	log.Println("✅ Kết nối database PostgreSQL thành công")
 	return nil
