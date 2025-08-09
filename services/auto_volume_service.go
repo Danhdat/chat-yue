@@ -152,10 +152,6 @@ func (s *AutoVolumeService) FetchAndSaveAllSymbolsVolume() error {
 			recentKlines = klines[len(klines)-22:] // Lấy 22 nến cuối cùng
 		}
 
-		// Debug: In ra số lượng nến để kiểm tra
-		fmt.Printf("Symbol %s: API trả về %d nến, sau xử lý có %d nến\n",
-			resolvedSymbol, len(klines), len(recentKlines))
-
 		loc := time.FixedZone("UTC+7", 7*60*60)
 		var records []models.AutoVolumeRecord
 

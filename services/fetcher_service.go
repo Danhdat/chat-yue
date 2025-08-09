@@ -193,9 +193,16 @@ func (s *FetcherService) FetchAndUpdateAlpha() error {
 		return err
 	}
 
+	// Lọc symbols có CexOffDisplay là false
+	var filteredSymbols []models.AlphaSymbol
+	for _, symbol := range symbols {
+		if !symbol.CexOffDisplay {
+			filteredSymbols = append(filteredSymbols, symbol)
+		}
+	}
 	// Lưu snapshot holders vào holder_history
-	logrus.Infof("Bắt đầu lưu snapshot holders cho %d symbols", len(symbols))
-	if err := s.saveHoldersSnapshot(symbols); err != nil {
+	logrus.Infof("Bắt đầu lưu snapshot holders cho %d symbols", len(filteredSymbols))
+	if err := s.saveHoldersSnapshot(filteredSymbols); err != nil {
 		logrus.Errorf("Lỗi khi lưu snapshot holders: %v", err)
 	} else {
 		logrus.Info("Hoàn thành lưu snapshot holders")

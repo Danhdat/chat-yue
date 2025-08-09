@@ -417,38 +417,6 @@ func (r *HolderHistoryRepository) Create(history *HolderHistory) error {
 	return r.db.Select("symbol", "holders", "change_amount", "created_at", "updated_at").Create(history).Error
 }
 
-// CreateBatch lưu nhiều holder history cùng lúc - Tối ưu hóa cho batch insert
-func (r *HolderHistoryRepository) CreateBatch(histories []*HolderHistory) error {
-	if len(histories) == 0 {
-		return nil
-	}
-
-	// Sử dụng batch insert với size 100
-	batchSize := 100
-	for i := 0; i < len(histories); i += batchSize {
-		end := i + batchSize
-		if end > len(histories) {
-			end = len(histories)
-		}
-
-		batch := histories[i:end]
-		if err := r.db.Select("symbol", "holders", "change_amount", "created_at", "updated_at").CreateInBatches(batch, len(batch)).Error; err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// CreateAsync lưu holder history bất đồng bộ - Tối ưu hóa cho performance
-func (r *HolderHistoryRepository) CreateAsync(history *HolderHistory) {
-	go func() {
-		if err := r.Create(history); err != nil {
-			// Log error nhưng không block main thread
-			fmt.Printf("Lỗi lưu holder history bất đồng bộ: %v\n", err)
-		}
-	}()
-}
-
 // GetLatestBySymbol lấy record mới nhất của một symbol
 func (r *HolderHistoryRepository) GetLatestBySymbol(symbol string) (*HolderHistory, error) {
 	var history HolderHistory
