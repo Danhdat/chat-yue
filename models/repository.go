@@ -458,3 +458,5 @@ func (r *HolderHistoryRepository) GetAllHolderHistoryThisWeek() ([]HolderHistory
 	err := r.db.Where("created_at >= ? AND created_at <= ?", startOfWeek, endOfWeek).Find(&histories).Error
 	return histories, err
 }
+
+//
